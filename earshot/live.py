@@ -59,9 +59,17 @@ class LiveController:
         self.mode = "counter"
         self._loop: asyncio.AbstractEventLoop | None = None
         self._mic: RingMic | None = None
-        self._transcriber = Transcriber(config.ASR_MODEL)
+        # two-tier ASR: fast base for partials + instant commit, small to refine
+        self._fast = Transcriber(config.ASR_FAST)
+        self._accurate = Transcriber(config.ASR_ACCURATE)
+        self._transcriber = self._fast  # back-compat alias
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
+        self._cid = 0                    # committed-line id (for background replace)
+        self._speaking = False           # gates recall/insight work to idle time
+        self._pending_recall: collections.deque[str] = collections.deque()
+        self.timing: dict = {}           # last per-stage latency (ms)
+        self._last_bench = 0.0
 
         # watch pacing state (read by the pacer on the event loop)
         self.watch_queue: collections.deque[str] = collections.deque()
@@ -142,6 +150,7 @@ class LiveController:
             return
         self._thread = threading.Thread(target=self._worker, name="earshot-live", daemon=True)
         self._thread.start()
+        threading.Thread(target=self._recall_worker, name="earshot-recall", daemon=True).start()
 
     def _stop_live(self) -> None:
         self._stop.set()
@@ -151,6 +160,17 @@ class LiveController:
         if self._mic is not None:
             self._mic.close()
             self._mic = None
+
+    def _recall_worker(self) -> None:
+        """Embed committed lines for recall ONLY when idle (never while speaking)."""
+        while not self._stop.is_set():
+            time.sleep(0.5)
+            if self._speaking or not self._pending_recall:
+                continue
+            try:
+                self.recall.add_line(self._pending_recall.popleft())
+            except Exception:
+                pass
 
     # ---- VAD helpers ----
     def _has_speech(self, samples: np.ndarray) -> bool:
@@ -165,86 +185,79 @@ class LiveController:
         )
         return bool(get_speech_timestamps(samples, opts, sampling_rate=config.SAMPLE_RATE))
 
-    # ---- worker ----
+    # ---- worker (two-tier: fast captions now, accurate refine in background) ----
     def _worker(self) -> None:
-        self._emit({"type": "event", "kind": "loading", "detail": config.ASR_MODEL, "ts": _ms()})
-        self._transcriber.load()
-        self._emit({"type": "event", "kind": "ready", "detail": config.ASR_MODEL, "ts": _ms()})
-        # Prewarm the LLMs (translation 3b, alerts/catch-up 1.5b) in the background
-        # so the first conversation turn / alert / catch-up isn't a cold-load timeout.
-        threading.Thread(
-            target=lambda: (llm.prewarm(config.LLM_HEAVY), llm.prewarm(config.LLM_DEFAULT)),
-            name="earshot-prewarm", daemon=True,
-        ).start()
+        self._emit({"type": "event", "kind": "loading", "detail": config.ASR_FAST, "ts": _ms()})
+        self._fast.load()
+        self._emit({"type": "event", "kind": "ready", "detail": config.ASR_FAST, "ts": _ms()})
+        threading.Thread(target=self._warm_background, name="earshot-warm", daemon=True).start()
 
-        active = False
-        utt_start = 0.0
-        last_partial = 0.0
-        last_speech = 0.0
-        utt_lang: str | None = None
-        last_partial_text = ""
-
+        st = {"active": False, "utt_start": 0.0, "last_partial": 0.0, "last_speech": 0.0,
+              "lang": None, "last_text": "", "first_partial": False}
         pause_s = config.PAUSE_SILENCE_MS / 1000.0
-
         while not self._stop.is_set():
             time.sleep(config.LOOP_TICK_S)
             if self._stop.is_set() or self._mic is None:
                 break
             try:
-                active, utt_start, last_partial, last_speech, utt_lang, last_partial_text = self._tick(
-                    active, utt_start, last_partial, last_speech, utt_lang, last_partial_text, pause_s
-                )
-            except Exception as exc:  # keep the worker alive on a transient error
+                self._tick(st, pause_s)
+            except Exception as exc:
                 self._emit({"type": "event", "kind": "asr_error", "detail": str(exc), "ts": _ms()})
 
-    def _tick(self, active, utt_start, last_partial, last_speech, utt_lang, last_partial_text, pause_s):
-            now = time.monotonic()
-            tail = self._mic.snapshot(0.8)
-            speaking = self._has_speech(tail)
+    def _warm_background(self) -> None:
+        try:
+            self._accurate.load()
+        except Exception:
+            pass
+        llm.prewarm(config.LLM_DEFAULT)
+        llm.prewarm(config.LLM_HEAVY)
+        try:  # warm the embedder so the first recall line indexes fast
+            recall._embed("warm", "search_document: ")
+        except Exception:
+            pass
+        self._emit({"type": "event", "kind": "warm", "detail": "models ready", "ts": _ms()})
 
-            if speaking:
-                last_speech = now
-                if not active:
-                    active = True
-                    utt_start = now
-                    last_partial = 0.0
-                    utt_lang = self._asr_lang_for_mode()  # forced (translate) or None (detect)
-                    last_partial_text = ""
-                # periodic partial
-                if now - last_partial >= config.PARTIAL_INTERVAL_S:
-                    dur = min(now - utt_start + 0.3, config.MAX_UTTERANCE_S + 1)
-                    samples = self._mic.snapshot(dur)
-                    if utt_lang is None:  # ambient/captions: detect once, then reuse
-                        utt_lang, _ = self._transcriber.detect(samples)
-                    try:
-                        raw, conf = self._transcriber._run(
-                            samples, "transcribe", utt_lang, config.ASR_BEAM_PARTIAL
-                        )
-                        txt = _clean(raw, conf)
-                    except Exception:
-                        txt = ""
-                    last_partial = now
-                    if txt and txt != last_partial_text:
-                        last_partial_text = txt
-                        self._emit({
-                            "type": "caption", "committed": False, "original": txt,
-                            "english": "", "lang": utt_lang or "", "matched": [],
-                            "rtf": None, "ts": _ms(),
-                        })
-                if now - utt_start >= config.MAX_UTTERANCE_S:
-                    self._commit(now, utt_start, utt_lang)
-                    active = False
-            else:
-                if active and (now - last_speech) >= pause_s:
-                    self._commit(now, utt_start, utt_lang)
-                    active = False
-            return active, utt_start, last_partial, last_speech, utt_lang, last_partial_text
+    def _tick(self, st: dict, pause_s: float) -> None:
+        now = time.monotonic()
+        speaking = self._has_speech(self._mic.snapshot(0.8))
+        if speaking:
+            st["last_speech"] = now
+            self._speaking = True
+            if not st["active"]:
+                st.update(active=True, utt_start=now, last_partial=0.0, last_text="",
+                          first_partial=False, lang=self._asr_lang_for_mode())
+            # AMBIENT/CAPTIONS: detect language once (on ~LANG_LOCK_S of speech), then lock
+            if st["lang"] is None and (now - st["utt_start"]) >= 0.6:
+                win = self._mic.snapshot(min(now - st["utt_start"] + 0.3, config.LANG_LOCK_S))
+                st["lang"], _ = self._fast.detect(win)
+            if now - st["last_partial"] >= config.PARTIAL_INTERVAL_S:
+                dur = min(now - st["utt_start"] + 0.2, config.MAX_UTTERANCE_S + 1)
+                samples = self._mic.snapshot(dur)
+                try:
+                    raw, conf = self._fast._run(samples, "transcribe", st["lang"], config.ASR_BEAM_PARTIAL)
+                    txt = _clean(raw, conf)
+                except Exception:
+                    txt = ""
+                st["last_partial"] = now
+                if txt and txt != st["last_text"]:
+                    st["last_text"] = txt
+                    if not st["first_partial"]:
+                        self.timing["partial_ms"] = int((now - st["utt_start"]) * 1000)
+                        st["first_partial"] = True
+                    self._emit({"type": "caption", "committed": False, "original": txt,
+                                "english": "", "lang": st["lang"] or "", "ts": _ms()})
+            if now - st["utt_start"] >= config.MAX_UTTERANCE_S:
+                self._commit(now, st["utt_start"], st["lang"]); st["active"] = False
+        else:
+            self._speaking = False
+            if st["active"] and (now - st["last_speech"]) >= pause_s:
+                self._commit(now, st["utt_start"], st["lang"]); st["active"] = False
 
     def _turn_asr_lang(self) -> str:
         return self.conv["their"] if self.conv["turn"] == "them" else self.conv["mine"]
 
     def _asr_lang_for_mode(self) -> str | None:
-        """Forced language (TRANSLATE turn) or None to auto-detect (AMBIENT/CAPTIONS)."""
+        """Forced language (TRANSLATE turn) or None to auto-detect+lock (AMBIENT/CAPTIONS)."""
         return self._turn_asr_lang() if self.app_mode == "translate" else None
 
     def _rtl(self, lang: str) -> bool:
@@ -253,74 +266,65 @@ class LiveController:
     def _commit(self, now: float, utt_start: float, utt_lang: str | None) -> None:
         if self._mic is None:
             return
-        dur = min(now - utt_start + 0.5, config.MAX_UTTERANCE_S + 1)
-        samples = self._mic.snapshot(dur)
+        if (now - utt_start) < config.MIN_SEGMENT_S:  # drop sub-0.6s blips
+            return
+        samples = self._mic.snapshot(min(now - utt_start + 0.4, config.MAX_UTTERANCE_S + 1))
+        lang = utt_lang or self._fast.detect(samples)[0]
+        t0 = time.perf_counter()
         try:
-            if self.app_mode == "translate":
-                self._commit_translate(samples, now)
-            else:  # ambient | captions
-                self._commit_listen(samples, utt_lang, now, announcements=(self.app_mode == "ambient"))
+            raw, conf = self._fast._run(samples, "transcribe", lang, config.ASR_BEAM_COMMIT)
         except Exception as exc:
             self._emit({"type": "event", "kind": "asr_error", "detail": str(exc), "ts": _ms()})
-
-    def _commit_translate(self, samples, now: float) -> None:
-        turn, their, mine = self.conv["turn"], self.conv["their"], self.conv["mine"]
-        beam = config.ASR_BEAM_COMMIT
-        if turn == "them":
-            original, conf = self._transcriber._run(samples, "transcribe", their, beam)
-            original = _clean(original, conf)
-            if not original:
-                return
-            english = self._to_english(samples, their, original, beam)
-            primary = {"text": english, "lang": "en", "rtl": False}
-            secondary = {"text": original, "lang": their, "rtl": self._rtl(their)}
-            watch_en = english
-        else:  # my turn: transcribe my language, translate -> their language (big)
-            original, conf = self._transcriber._run(samples, "transcribe", mine, beam)
-            original = _clean(original, conf)
-            if not original:
-                return
-            translated = llm.translate(original, their, model=config.LLM_HEAVY) or original
-            primary = {"text": translated, "lang": their, "rtl": self._rtl(their)}
-            secondary = {"text": original, "lang": mine, "rtl": self._rtl(mine)}
-            watch_en = original if mine == "en" else self._to_english(samples, mine, original, beam)
-        self._publish_caption(turn, original, watch_en, self._turn_asr_lang(), primary, secondary, now)
-
-    def _commit_listen(self, samples, lang: str | None, now: float, *, announcements: bool) -> None:
-        beam = config.ASR_BEAM_COMMIT
-        if lang is None:
-            lang, _ = self._transcriber.detect(samples)
-        original, conf = self._transcriber._run(samples, "transcribe", lang, beam)
-        original = _clean(original, conf)
+            return
+        original = _clean(raw, conf)
         if not original:
             return
-        read = self.read_lang
-        watch_en = original if lang == "en" else self._to_english(samples, lang, original, beam)
-        if lang == read:
-            shown = original
-        elif read == "en":
-            shown = watch_en
-        else:
-            shown = llm.translate(original, read, model=config.LLM_HEAVY) or watch_en
-        primary = {"text": shown, "lang": read, "rtl": self._rtl(read)}
-        secondary = ({"text": original, "lang": lang, "rtl": self._rtl(lang)} if lang != read else {})
-        # "speaker changed" divider when the pause before this line was long.
+        commit_ms = int((time.perf_counter() - t0) * 1000)
+        self._cid += 1
+        cid = self._cid
         divider = (now - self._last_commit_mono) > 1.5
-        self._publish_caption("them", original, watch_en, lang, primary, secondary, now,
-                              announcements=announcements, divider=divider)
-
-    def _publish_caption(self, speaker, original, watch_en, lang, primary, secondary, now,
-                         *, announcements: bool = False, divider: bool = False) -> None:
         self._last_commit_mono = now
-        self.history.append((time.time(), watch_en))
-        # index for recall (embedding is a loopback Ollama call — do it off-thread)
-        threading.Thread(target=self.recall.add_line, args=(watch_en,), daemon=True).start()
-        is_alert, matched, alert_title = self._check_alert(watch_en, original, announcements)
+        speaker = self.conv["turn"] if self.app_mode == "translate" else "them"
+        self.timing.update(commit_ms=commit_ms, e2e_ms=commit_ms)
+        # Emit the FAST line immediately — captions never wait on refine/LLM.
         self._emit({
-            "type": "caption", "committed": True, "speaker": speaker,
-            "original": original, "english": watch_en, "lang": lang,
-            "primary": primary, "secondary": secondary,
-            "matched": matched, "alert": is_alert, "divider": divider, "ts": _ms(),
+            "type": "caption", "committed": True, "id": cid, "speaker": speaker,
+            "original": original, "english": "", "lang": lang, "pending": True,
+            "primary": {"text": original, "lang": lang, "rtl": self._rtl(lang)}, "secondary": {},
+            "matched": [], "alert": False, "divider": divider,
+            "timing": {"commit_ms": commit_ms, "partial_ms": self.timing.get("partial_ms")}, "ts": _ms(),
+        })
+        ctx = {"app_mode": self.app_mode, "read_lang": self.read_lang, "conv": dict(self.conv),
+               "announcements": (self.app_mode == "ambient")}
+        threading.Thread(target=self._refine, args=(samples, lang, original, cid, ctx),
+                         name="earshot-refine", daemon=True).start()
+
+    def _refine(self, samples, lang: str, original_fast: str, cid: int, ctx: dict) -> None:
+        t0 = time.perf_counter()
+        try:  # accurate re-transcribe (small, beam 1)
+            raw, conf = self._accurate._run(samples, "transcribe", lang, 1)
+            original = _clean(raw, conf) or original_fast
+        except Exception:
+            original = original_fast
+        # English via whisper translate (xx->en) — no LLM on this path
+        tr_ms = None
+        if lang == "en":
+            watch_en = original
+        else:
+            tt = time.perf_counter()
+            try:
+                en_raw, en_conf = self._fast._run(samples, "translate", lang, 1)
+                watch_en = _clean(en_raw, en_conf) or original
+            except Exception:
+                watch_en = original
+            tr_ms = int((time.perf_counter() - tt) * 1000)
+        primary, secondary = self._display_for(ctx, original, watch_en, lang)
+        is_alert, matched, alert_title = self._check_alert(watch_en, original, ctx["announcements"])
+        self._emit({
+            "type": "caption_update", "id": cid, "original": original, "english": watch_en,
+            "lang": lang, "primary": primary, "secondary": secondary,
+            "matched": matched, "alert": is_alert,
+            "timing": {"translate_ms": tr_ms, "refine_ms": int((time.perf_counter() - t0) * 1000)}, "ts": _ms(),
         })
         for chunk in captions.chunk_for_watch(watch_en):
             self.watch_queue.append(chunk)
@@ -328,8 +332,53 @@ class LiveController:
             self.alert_title = captions.clip_title(alert_title or watch_en)
             self.alert_until = time.monotonic() + config.ALERT_HOLD_S
             voice.chime()
-            self._emit({"type": "event", "kind": "alert", "detail": self.alert_title,
-                        "matched": matched, "ts": _ms()})
+            self._emit({"type": "event", "kind": "alert", "detail": self.alert_title, "matched": matched, "ts": _ms()})
+        self.history.append((time.time(), watch_en))
+        self._pending_recall.append(watch_en)  # embedded when idle (recall worker)
+        self.timing["translate_ms"] = tr_ms
+        self._emit({"type": "timing", **self.timing, "ts": _ms()})
+        self._maybe_write_bench()
+
+    def _display_for(self, ctx: dict, original: str, watch_en: str, lang: str) -> tuple[dict, dict]:
+        """Compute the on-screen primary/secondary per mode. qwen is used ONLY for
+        English->their-language (short, capped); xx->English used whisper above."""
+        mode = ctx["app_mode"]
+        if mode == "translate":
+            conv = ctx["conv"]
+            if conv["turn"] == "them":
+                return ({"text": watch_en, "lang": "en", "rtl": False},
+                        {"text": original, "lang": lang, "rtl": self._rtl(lang)})
+            their = conv["their"]
+            src_en = original if lang == "en" else watch_en
+            translated = llm.translate(src_en, their, model=config.LLM_DEFAULT) or src_en
+            return ({"text": translated, "lang": their, "rtl": self._rtl(their)},
+                    {"text": original, "lang": lang, "rtl": self._rtl(lang)})
+        read = ctx["read_lang"]
+        if lang == read:
+            shown = original
+        elif read == "en":
+            shown = watch_en
+        else:
+            shown = llm.translate(watch_en, read, model=config.LLM_DEFAULT) or watch_en
+        secondary = {"text": original, "lang": lang, "rtl": self._rtl(lang)} if lang != read else {}
+        return {"text": shown, "lang": read, "rtl": self._rtl(read)}, secondary
+
+    def _maybe_write_bench(self) -> None:
+        now = time.time()
+        if now - self._last_bench < 8.0:
+            return
+        self._last_bench = now
+        try:
+            from pathlib import Path
+            p = Path(__file__).resolve().parent.parent / "docs" / "bench.txt"
+            t = self.timing
+            line = (f"latency  partial={t.get('partial_ms')}ms commit={t.get('commit_ms')}ms "
+                    f"translate={t.get('translate_ms')}ms e2e={t.get('e2e_ms')}ms "
+                    f"({time.strftime('%H:%M:%S')})\n")
+            with p.open("a", encoding="utf-8") as f:
+                f.write(line)
+        except Exception:
+            pass
 
     def _check_alert(self, english: str, original: str, announcements: bool = False) -> tuple[bool, list[str], str]:
         kws = list(config.ALERT_KEYWORDS)
@@ -354,17 +403,6 @@ class LiveController:
         if question:
             is_alert = True
         return is_alert, (hits or ["question"]), title
-
-    def _to_english(self, samples, lang: str, original: str, beam: int) -> str:
-        """English for the watch. Whisper translate; for Tagalog, fall back to the
-        local LLM if whisper's output is still Tagalog."""
-        if lang == "en":
-            return original
-        raw_en, conf_en = self._transcriber._run(samples, "translate", lang, beam)
-        english = _clean(raw_en, conf_en) or original
-        if lang == "tl" and _looks_tagalog(english):
-            english = llm.translate(original, "en", model=config.LLM_HEAVY) or english
-        return english
 
     # ---- mute (privacy) ----
     def mute(self, muted: bool) -> dict:

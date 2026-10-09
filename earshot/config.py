@@ -23,24 +23,31 @@ RTL_LANGS = {"ar", "he", "fa", "ur"}  # render right-to-left
 CONV_DEFAULT = {"their": "ar", "mine": "en", "turn": "them"}
 
 # --- ASR models (multilingual; NOT the .en models) ---
-ASR_MODEL = "small"          # accuracy pick; use base if small RTF > 0.5 under load
-ASR_MODEL_FALLBACK = "base"
-ASR_BEAM_COMMIT = 5          # accurate pass on commit
-ASR_BEAM_PARTIAL = 1         # fast pass for live partials
+# Two-tier: FAST drives partials + the instant commit; ACCURATE refines in the
+# background and replaces the line. Speed beats everything.
+ASR_FAST = "base"            # fast partials + instant commit (beam 1)
+ASR_ACCURATE = "small"       # background refine (beam 1)
+ASR_MODEL = ASR_FAST         # back-compat for bench/asr default
+ASR_MODEL_FALLBACK = "tiny"
+ASR_BEAM_COMMIT = 1          # NEVER beam-search on the hot path
+ASR_BEAM_PARTIAL = 1
 
 # Now Playing (watch / lock screen) shows the English translation.
 TRANSLATE_FOR_NOWPLAYING = True
 
-# --- live pipeline / VAD endpointing ---
+# --- live pipeline / VAD endpointing (tuned for latency) ---
 SAMPLE_RATE = 16000
 RING_SECONDS = 30            # RAM ring buffer length (privacy: last 30 s only)
-LOOP_TICK_S = 0.4            # how often the worker checks VAD state
-PARTIAL_INTERVAL_S = 1.5     # re-transcribe active utterance for a partial
+LOOP_TICK_S = 0.25           # how often the worker checks VAD state
+PARTIAL_INTERVAL_S = 0.7     # stream a partial this often while speaking
 MAX_UTTERANCE_S = 12.0       # force a commit if speech runs this long
-PAUSE_SILENCE_MS = 600       # commit the utterance after this much trailing silence
+PAUSE_SILENCE_MS = 450       # commit after this much trailing silence
+MIN_SEGMENT_S = 0.6          # drop utterances shorter than this (noise blips)
 VAD_THRESHOLD = 0.5
-VAD_MIN_SPEECH_MS = 250
-VAD_MIN_SILENCE_MS = 300
+VAD_MIN_SPEECH_MS = 200
+VAD_MIN_SILENCE_MS = 400
+LANG_LOCK_S = 5.0            # AMBIENT: detect once per this much speech, then lock
+LLM_TRANSLATE_MAX_TOKENS = 60  # English -> their language, kept short
 
 # --- watch rolling chunks (lock screen / Garmin) ---
 WATCH_CHUNK_INTERVAL_S = 1.5
@@ -51,8 +58,8 @@ ALERT_HOLD_S = 8.0           # an alert overrides the watch title for this long
 # --- initial prompts (bias spelling) ---
 EN_PROMPT = "Class announcement. Names: Fathi. Terms: quiz, exam, midterm, deadline, due, submit, assignment, Monday."
 TAGLISH_PROMPT = (
-    "Anunsyo sa klase. Taglish: Fathi, quiz, exam, deadline, due, submit, assignment, "
-    "professor, ma'am, sir, Lunes, Martes, bukas, ngayon, tayo, kailangan, grabe, pasok."
+    "Kumusta, ayos lang, salamat, opo, hindi, saan, ano. "
+    "Fathi, quiz, exam, deadline, submit, assignment, Lunes, bukas, pagsusulit."
 )
 INITIAL_PROMPTS = {"en": EN_PROMPT, "tl": TAGLISH_PROMPT}
 

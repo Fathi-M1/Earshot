@@ -8,12 +8,47 @@ speakers/earbuds (generated in RAM, no file on disk).
 from __future__ import annotations
 
 import threading
+from pathlib import Path
 
 import numpy as np
 
 from . import config
 
 _lock = threading.Lock()
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+PIPER_DIR = REPO_ROOT / "models" / "piper"
+PIPER_VOICE = "en_US-lessac-medium"
+
+
+def _find_piper_voice() -> Path | None:
+    onnx = PIPER_DIR / f"{PIPER_VOICE}.onnx"
+    return onnx if onnx.exists() else None
+
+
+def _speak_piper(text: str) -> bool:
+    """Piper TTS (preferred). Python wheel first, then a piper.exe binary."""
+    voice = _find_piper_voice()
+    if voice is None:
+        return False
+    # 1) piper-tts Python wheel
+    try:
+        import sounddevice as sd
+        from piper import PiperVoice
+
+        v = PiperVoice.load(str(voice))
+        chunks = []
+        for audio in v.synthesize_stream_raw(text):
+            chunks.append(np.frombuffer(audio, dtype=np.int16))
+        if chunks:
+            pcm = np.concatenate(chunks).astype(np.float32) / 32768.0
+            sd.play(pcm, int(v.config.sample_rate))
+            sd.wait()
+            return True
+    except Exception:
+        pass
+    # 2) piper.exe binary writing to a device is complex; skip to SAPI.
+    return False
 
 
 def _speak_pyttsx3(text: str) -> bool:
@@ -34,7 +69,8 @@ def speak(text: str) -> str:
     if not text:
         return "none"
     with _lock:  # one utterance at a time
-        # Piper hook would go here (preferred); SAPI fallback for now.
+        if _speak_piper(text):
+            return "piper"
         if _speak_pyttsx3(text):
             return "sapi"
     return "none"

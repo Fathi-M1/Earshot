@@ -292,6 +292,7 @@ def _live_page(token: str) -> str:
   .eng{{ font-size:13px; color:var(--sage); }}
   .row.match .orig{{ color:var(--needs); }}
   .row.match .lang{{ background:var(--needs); }}
+  .row.pending .orig{{ opacity:.55; }}
   .evt .orig{{ color:var(--sage); font-weight:400; font-style:normal; }}
   .np .big{{ font-size:22px; font-weight:600; min-height:1.3em; }}
   .np .sub{{ font-size:13px; color:var(--sage); margin-top:4px; }}
@@ -309,6 +310,7 @@ def _live_page(token: str) -> str:
     <h1>{display} · live</h1>
     <span class="pill" id="statePill">—</span>
     <span class="pill" id="connPill">connecting…</span>
+    <span class="pill" id="timingPill" title="partial / commit / translate latency">—</span>
     <div class="spacer"></div>
     <button id="counterBtn">Counter (film)</button>
     <button id="liveBtn">Go live (mic)</button>
@@ -403,7 +405,19 @@ def _live_page(token: str) -> str:
     div.innerHTML = html;
     log.prepend(div);
     while (log.childElementCount > 200) log.removeChild(log.lastChild);
+    return div;
   }}
+  function capRowHtml(m){{
+    const match = (m.alert || (m.matched && m.matched.length)) ? 'match' : '';
+    const who = (m.speaker==='me'?'You':'Them');
+    const p = m.primary||{{text:m.original}}, s = m.secondary||{{}};
+    const pd = p.rtl? ' dir="rtl"':''; const sd = s.rtl? ' dir="rtl"':'';
+    const sec = s.text ? `<div class="eng"${{sd}}>${{s.text}}</div>` : '';
+    return {{html:`<div class="t">${{hhmmss(m.ts)}}</div><div class="lang">${{m.lang||'?'}}·${{who}}</div>`+
+           `<div><div class="orig"${{pd}}>${{esc2(p.text||'')}}</div>${{sec}}`+
+           (match?` <div class="eng">⬥ ${{(m.matched||[]).join(', ')}}</div>`:'')+`</div>`, match:match}};
+  }}
+  function esc2(s){{ return (s||'').replace(/[&<>]/g,c=>({{'&':'&amp;','<':'&lt;','>':'&gt;'}}[c])); }}
   function setState(state){{
     const p = document.getElementById('statePill');
     p.textContent = state; p.className = 'pill' + (state==='ALERT'?' alert':(state==='LISTENING'?' live':''));
@@ -421,14 +435,15 @@ def _live_page(token: str) -> str:
         return;
       }}
       document.getElementById('partial').textContent = '';
-      const match = (m.alert || (m.matched && m.matched.length)) ? 'match' : '';
-      const who = (m.speaker==='me'?'You':'Them');
-      const p = m.primary||{{text:m.original}}, s = m.secondary||{{}};
-      const pd = p.rtl? ' dir="rtl"':''; const sd = s.rtl? ' dir="rtl"':'';
-      const sec = s.text ? `<div class="eng"${{sd}}>${{s.text}}</div>` : '';
-      addRow(`<div class="t">${{hhmmss(m.ts)}}</div><div class="lang">${{m.lang||'?'}}·${{who}}</div>`+
-             `<div><div class="orig"${{pd}}>${{p.text||''}}</div>${{sec}}`+
-             (match?` <div class="eng">⬥ ${{(m.matched||[]).join(', ')}}</div>`:'')+`</div>`, match);
+      const r = capRowHtml(m);
+      const row = addRow(r.html, r.match + (m.pending?' pending':''));
+      if (m.id) row.setAttribute('data-id', m.id);
+    }} else if (m.type === 'caption_update'){{
+      const row = log.querySelector('[data-id="'+m.id+'"]');
+      if (row){{ const r = capRowHtml(m); row.innerHTML = r.html; row.className = 'row ' + r.match; }}
+    }} else if (m.type === 'timing'){{
+      document.getElementById('timingPill').textContent =
+        'p'+(m.partial_ms||'–')+' c'+(m.commit_ms||'–')+' t'+(m.translate_ms||'–')+'ms';
     }} else if (m.type === 'conv'){{
       curConv = {{their:m.their, mine:m.mine, turn:m.turn}}; syncConv();
     }} else if (m.type === 'appmode'){{
@@ -812,7 +827,9 @@ async def _insight_timer(controller: LiveController) -> None:
     """Every 10 min in AMBIENT live mode, auto-create an insight card."""
     while True:
         await asyncio.sleep(600)
-        if controller.mode == "live" and controller.app_mode == "ambient" and not controller.muted:
+        # only when idle (never while speaking) — insights must not steal CPU from ASR
+        if (controller.mode == "live" and controller.app_mode == "ambient"
+                and not controller.muted and not controller._speaking):
             await run_in_threadpool(controller.make_insight)
 
 
@@ -848,11 +865,15 @@ async def _serve_async(hub: Hub, controller: LiveController, *, tick: bool, star
     await asyncio.gather(*coros)
 
 
-def serve(*, tick: bool = True, start_live: bool = False) -> None:
+def serve(*, tick: bool = True, start_live: bool = False, demo: bool = False) -> None:
     """Run the daemon. Always restores internet + releases the mic on exit."""
     hub = Hub()
     controller = LiveController(hub)
     display = brand.display_name()
+    if demo:
+        print("=" * 60)
+        print(f"  {display} — DEMO MODE (models preloading, live mic)")
+        print("=" * 60)
     print(f"{display} daemon")
     print(f"  dashboard : http://{DASH_HOST}:{DASH_PORT}/        (counter page for the latency film)")
     print(f"  live log  : http://{DASH_HOST}:{DASH_PORT}/live    (captions + detected language + events)")

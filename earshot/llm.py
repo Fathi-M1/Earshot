@@ -30,7 +30,11 @@ def _sanitize(text: str, target_lang: str) -> str:
     return re.sub(r"\s{2,}", " ", cleaned).strip()
 
 
-def chat_json(model: str, system: str, user: str, schema: dict, timeout: float = 8.0) -> dict | None:
+def chat_json(model: str, system: str, user: str, schema: dict, timeout: float = 8.0,
+              num_predict: int | None = None) -> dict | None:
+    options = {"temperature": 0, "seed": 7, "num_thread": 2}
+    if num_predict:
+        options["num_predict"] = num_predict
     body = {
         "model": model,
         "messages": [
@@ -40,7 +44,7 @@ def chat_json(model: str, system: str, user: str, schema: dict, timeout: float =
         "stream": False,
         "format": schema,
         "keep_alive": -1,
-        "options": {"temperature": 0, "seed": 7, "num_thread": 2},
+        "options": options,
     }
     try:
         resp = localclient.post_json(f"{OLLAMA}/api/chat", body, timeout=timeout)
@@ -80,7 +84,8 @@ def translate(text: str, target_lang: str, model: str = config.LLM_HEAVY, timeou
         f"Output JSON only: {{\"translation\": \"...\"}}. "
         f"Return only the {target_name} translation, no notes, no transliteration, no original."
     )
-    out = chat_json(model, system, text, _TRANSLATION_SCHEMA, timeout=timeout)
+    out = chat_json(model, system, text, _TRANSLATION_SCHEMA, timeout=timeout,
+                    num_predict=config.LLM_TRANSLATE_MAX_TOKENS)
     if not out:
         return None
     raw = str(out.get("translation", "")).strip()

@@ -60,6 +60,7 @@
   .insight .k{ font:400 11px/1 ui-monospace,monospace; color:var(--sage); text-transform:uppercase; }
   .insight ul{ margin:2px 0 8px; padding-left:18px; font-size:14px; }
   .line.alert .primary{ color:var(--needs); }
+  .line.pending .primary{ opacity:.55; }
   .line .secondary{ font-size:clamp(14px,3.4vw,18px); line-height:1.25; color:var(--sage); }
   #partial{ flex:0 0 auto; padding:0 16px 6px; font-size:clamp(18px,4.4vw,24px);
             color:var(--moss); font-style:italic; min-height:1.3em; }
@@ -101,6 +102,7 @@
   <div id="main" class="screen">
     <div class="top">
       <span class="cdot" id="cdot"></span><span id="conn">connecting…</span>
+      <span class="diag" id="timing"></span>
       <span class="lang" id="lang">—</span><span class="diag" id="diag"></span>
     </div>
     <div id="scroll"><div id="stack"></div></div>
@@ -206,7 +208,7 @@
       if (ln._insight){ var ic=document.createElement("div"); ic.innerHTML=insightHtml(ln); stackEl.appendChild(ic.firstChild); return; }
       if (ln.divider){ var dv=document.createElement("div"); dv.className="divider"; dv.textContent="— speaker changed —"; stackEl.appendChild(dv); }
       var div = document.createElement("div");
-      div.className = "line " + (ln.speaker||"them") + (ln.alert?" alert":"");
+      div.className = "line " + (ln.speaker||"them") + (ln.alert?" alert":"") + (ln.pending?" pending":"");
       var p = ln.primary||{}, s = ln.secondary||{};
       var who = (ln.speaker==="me"?"You":"Them") + (ln.alert?" · ⬥ alert":"");
       var pr = '<div class="primary"'+(p.rtl?' dir="rtl" lang="'+(p.lang||'')+'"':'')+'>'+esc(p.text)+'</div>';
@@ -239,6 +241,14 @@
     if (m.type==="appmode"){ appMode=m.app_mode; readLang=m.read_lang; syncControls(); return; }
     if (m.type==="insight"){ var c={_insight:true}; for(var k in m)c[k]=m[k]; lines.push(c);
       if(lines.length>60)lines=lines.slice(-60); renderStack(); return; }
+    if (m.type==="timing"){
+      document.getElementById("timing").textContent =
+        "p"+(m.partial_ms||"–")+" c"+(m.commit_ms||"–")+" t"+(m.translate_ms||"–")+"ms"; return; }
+    if (m.type==="caption_update"){
+      for (var i=lines.length-1;i>=0;i--){ if(lines[i].id===m.id){
+        lines[i].primary=m.primary; lines[i].secondary=m.secondary; lines[i].english=m.english;
+        lines[i].alert=m.alert; lines[i].matched=m.matched; lines[i].pending=false; break; } }
+      renderStack(); return; }
     if (m.type==="caption"){
       if (!m.committed){ document.getElementById("partial").textContent =
         (m.lang?"["+m.lang+"] ":"")+"… "+(m.original||""); return; }
