@@ -21,3 +21,14 @@ Hotspot + firewall cut (scripts\cut-internet.ps1 from admin PowerShell):
 ## ASR / Ollama (auto-appended by `earshot bench` once you record tests/audio/*.wav)
 # Fathi's earlier cold/no-VAD spike: base took 13.4 s for 10 s audio (RTF 1.34).
 # Bench pick = biggest model with mean RTF <= 0.5 (warm, VAD on, cpu_threads=4).
+
+# bench 2026-10-09 19:54:12
+## ASR (faster-whisper int8, cpu_threads=4, VAD on, warm; RTF = proc/audio)
+model     wav                   audio_s   proc_s     rtf     wer
+
+## Ollama (tokens/s from eval metrics; options num_thread=2)
+model             tokens   eval_s    tok/s   wall_s
+qwen2.5:3b            14     2.22      6.3    19.01
+qwen2.5:1.5b          15     1.64      9.1    10.22
+
+localclient bytes sent/recv: 440 / 1390 (requests 2)
