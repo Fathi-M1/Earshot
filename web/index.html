@@ -119,10 +119,14 @@
         <button class="chip" data-mode="captions">Captions</button>
         <button class="chip" data-mode="translate">Translate</button>
       </div>
+      <div class="picker" id="srcRow">Spoken:
+        <button class="chip" data-src="en">English</button>
+        <button class="chip" data-src="tl">Tagalog</button>
+        <button class="chip" data-src="ar">Arabic</button>
+      </div>
       <div class="picker" id="readRow">I read:
         <button class="chip" data-read="en">English</button>
         <button class="chip" data-read="tl">Tagalog</button>
-        <button class="chip" data-read="es">Spanish</button>
         <button class="chip" data-read="ar">Arabic</button>
         <button class="chip" id="aMinus" style="margin-left:auto">A-</button>
         <button class="chip" id="aPlus">A+</button>
@@ -130,13 +134,11 @@
       <div class="picker" id="theirRow">They speak:
         <button class="chip" data-their="ar">Arabic</button>
         <button class="chip" data-their="tl">Tagalog</button>
-        <button class="chip" data-their="es">Spanish</button>
         <button class="chip" data-their="en">English</button>
       </div>
       <div class="picker" id="mineRow">I speak:
         <button class="chip" data-mine="en">English</button>
         <button class="chip" data-mine="tl">Tagalog</button>
-        <button class="chip" data-mine="es">Spanish</button>
         <button class="chip" data-mine="ar">Arabic</button>
       </div>
       <div class="row2" id="turnRow">
@@ -164,7 +166,7 @@
   var display = "Earshot";
   var audio=null, ws=null, backoff=500, lastState="LISTENING", wakeLock=null, stick=true, muted=false;
   var conv = {their:"ar", mine:"en", turn:"them"};
-  var appMode = "ambient", readLang = "en", capScale = 1;
+  var appMode = "ambient", readLang = "en", srcLang = "en", capScale = 1;
   var lines=[];
 
   var cfgReady = fetch("/config").then(function(r){return r.json();}).then(function(c){
@@ -238,7 +240,7 @@
       document.getElementById("muteBtn").classList.toggle("on", muted);
       document.getElementById("muteBtn").textContent = muted ? "Muted" : "Mute"; return; }
     if (m.type==="conv"){ conv={their:m.their,mine:m.mine,turn:m.turn}; syncControls(); return; }
-    if (m.type==="appmode"){ appMode=m.app_mode; readLang=m.read_lang; syncControls(); return; }
+    if (m.type==="appmode"){ appMode=m.app_mode; readLang=m.read_lang; srcLang=m.src_lang||srcLang; syncControls(); return; }
     if (m.type==="insight"){ var c={_insight:true}; for(var k in m)c[k]=m[k]; lines.push(c);
       if(lines.length>60)lines=lines.slice(-60); renderStack(); return; }
     if (m.type==="timing"){
@@ -302,10 +304,11 @@
   function post(path, body){ return fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body||{})}); }
   function fetchConv(){ fetch("/conv").then(function(r){return r.json();}).then(function(c){
     conv={their:c.their,mine:c.mine,turn:c.turn}; muted=!!c.muted;
-    appMode=c.app_mode||appMode; readLang=c.read_lang||readLang; syncControls(); }).catch(function(){}); }
+    appMode=c.app_mode||appMode; readLang=c.read_lang||readLang; srcLang=c.src_lang||srcLang; syncControls(); }).catch(function(){}); }
   function syncControls(){
     document.querySelectorAll("[data-mode]").forEach(function(b){ b.classList.toggle("on", b.dataset.mode===appMode); });
     document.querySelectorAll("[data-read]").forEach(function(b){ b.classList.toggle("on", b.dataset.read===readLang); });
+    document.querySelectorAll("[data-src]").forEach(function(b){ b.classList.toggle("on", b.dataset.src===srcLang); });
     document.querySelectorAll("[data-their]").forEach(function(b){ b.classList.toggle("on", b.dataset.their===conv.their); });
     document.querySelectorAll("[data-mine]").forEach(function(b){ b.classList.toggle("on", b.dataset.mine===conv.mine); });
     document.getElementById("turnThem").classList.toggle("on", conv.turn==="them");
@@ -316,11 +319,13 @@
     document.getElementById("theirRow").style.display = translate?"flex":"none";
     document.getElementById("mineRow").style.display = translate?"flex":"none";
     document.getElementById("turnRow").style.display = translate?"flex":"none";
+    document.getElementById("srcRow").style.display = translate?"none":"flex";
     document.getElementById("readRow").style.display = translate?"none":"flex";
     document.getElementById("insightBtn").style.display = (appMode==="ambient")?"block":"none";
   }
   document.querySelectorAll("[data-mode]").forEach(function(b){ b.onclick=function(){ post("/appmode",{app_mode:b.dataset.mode}); appMode=b.dataset.mode; syncControls(); }; });
   document.querySelectorAll("[data-read]").forEach(function(b){ b.onclick=function(){ post("/appmode",{read_lang:b.dataset.read}); readLang=b.dataset.read; syncControls(); }; });
+  document.querySelectorAll("[data-src]").forEach(function(b){ b.onclick=function(){ post("/appmode",{src_lang:b.dataset.src}); srcLang=b.dataset.src; syncControls(); }; });
   document.querySelectorAll("[data-their]").forEach(function(b){ b.onclick=function(){ post("/conv",{their:b.dataset.their}); conv.their=b.dataset.their; syncControls(); }; });
   document.querySelectorAll("[data-mine]").forEach(function(b){ b.onclick=function(){ post("/conv",{mine:b.dataset.mine}); conv.mine=b.dataset.mine; syncControls(); }; });
   document.getElementById("turnThem").onclick=function(){ post("/conv",{turn:"them"}); conv.turn="them"; syncControls(); };

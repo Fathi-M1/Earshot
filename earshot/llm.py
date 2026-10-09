@@ -43,7 +43,7 @@ def chat_json(model: str, system: str, user: str, schema: dict, timeout: float =
         ],
         "stream": False,
         "format": schema,
-        "keep_alive": -1,
+        "keep_alive": config.LLM_KEEP_ALIVE,
         "options": options,
     }
     try:
@@ -65,8 +65,8 @@ _TRANSLATION_SCHEMA = {
 
 
 def prewarm(model: str, timeout: float = 45.0) -> bool:
-    """Load a model into memory (keep_alive -1) so the first real call is fast."""
-    body = {"model": model, "prompt": "ok", "stream": False, "keep_alive": -1,
+    """Load a model into memory so the first real call is fast (5m keep_alive)."""
+    body = {"model": model, "prompt": "ok", "stream": False, "keep_alive": config.LLM_KEEP_ALIVE,
             "options": {"num_predict": 1}}
     try:
         localclient.post_json(f"{OLLAMA}/api/generate", body, timeout=timeout)

@@ -70,6 +70,8 @@ class LiveController:
         self._pending_recall: collections.deque[str] = collections.deque()
         self.timing: dict = {}           # last per-stage latency (ms)
         self._last_bench = 0.0
+        self._last_speech_end = 0.0      # monotonic; for idle gating (recall/insights)
+        self._refine_gen = 0             # only the newest committed line refines
 
         # watch pacing state (read by the pacer on the event loop)
         self.watch_queue: collections.deque[str] = collections.deque()
@@ -82,6 +84,7 @@ class LiveController:
         # app mode: ambient (default) | captions | translate
         self.app_mode = "ambient"
         self.read_lang = "en"   # language the user reads (captions/ambient)
+        self.src_lang = config.SRC_LANG_DEFAULT  # spoken language (user-picked, no auto-detect)
         # conversation mode (explicit languages, turn-based) — used by TRANSLATE
         self.conv = dict(config.CONV_DEFAULT)
         self.muted = False
@@ -97,13 +100,17 @@ class LiveController:
         self._loop = loop
 
     # ---- app mode (ambient | captions | translate) + reading language ----
-    def set_app_mode(self, app_mode: str | None = None, read_lang: str | None = None) -> dict:
+    def set_app_mode(self, app_mode: str | None = None, read_lang: str | None = None,
+                     src_lang: str | None = None) -> dict:
         if app_mode in ("ambient", "captions", "translate"):
             self.app_mode = app_mode
         if read_lang in config.ASR_LANGS:
             self.read_lang = read_lang
-        self._emit({"type": "appmode", "app_mode": self.app_mode, "read_lang": self.read_lang, "ts": _ms()})
-        return {"app_mode": self.app_mode, "read_lang": self.read_lang}
+        if src_lang in config.ASR_LANGS:
+            self.src_lang = src_lang
+        self._emit({"type": "appmode", "app_mode": self.app_mode, "read_lang": self.read_lang,
+                    "src_lang": self.src_lang, "ts": _ms()})
+        return {"app_mode": self.app_mode, "read_lang": self.read_lang, "src_lang": self.src_lang}
 
     # ---- conversation settings ----
     def set_conv(self, their: str | None = None, mine: str | None = None, turn: str | None = None) -> dict:
@@ -162,10 +169,13 @@ class LiveController:
             self._mic = None
 
     def _recall_worker(self) -> None:
-        """Embed committed lines for recall ONLY when idle (never while speaking)."""
+        """Embed committed lines for recall ONLY when idle > IDLE_SECONDS (never
+        while speaking) so embeddings don't steal CPU from ASR."""
         while not self._stop.is_set():
-            time.sleep(0.5)
+            time.sleep(1.0)
             if self._speaking or not self._pending_recall:
+                continue
+            if (time.monotonic() - self._last_speech_end) < config.IDLE_SECONDS:
                 continue
             try:
                 self.recall.add_line(self._pending_recall.popleft())
@@ -204,6 +214,30 @@ class LiveController:
             except Exception as exc:
                 self._emit({"type": "event", "kind": "asr_error", "detail": str(exc), "ts": _ms()})
 
+    def warmup(self) -> dict:
+        """Run ONE dummy inference per loaded model so the first real sentence has
+        no cold-start spike. Called by `serve --demo` before printing the QR."""
+        import numpy as np
+
+        timings = {}
+        dummy = np.zeros(int(1.0 * config.SAMPLE_RATE), dtype=np.float32)
+        for name, tr in (("fast", self._fast), ("accurate", self._accurate)):
+            t0 = time.perf_counter()
+            try:
+                tr.load()
+                tr._run(dummy, "transcribe", "en", 1)
+            except Exception:
+                pass
+            timings[name] = int((time.perf_counter() - t0) * 1000)
+        t0 = time.perf_counter()
+        llm.prewarm(config.LLM_DEFAULT)
+        timings["llm_1.5b"] = int((time.perf_counter() - t0) * 1000)
+        try:
+            recall._embed("warm", "search_document: ")
+        except Exception:
+            pass
+        return timings
+
     def _warm_background(self) -> None:
         # Only warm what the live path uses (1.5b for translate/alerts/catch-up +
         # nomic for recall). 3b is NOT on the hot path — prewarming it stole CPU
@@ -226,14 +260,12 @@ class LiveController:
             st["last_speech"] = now
             self._speaking = True
             if not st["active"]:
+                # lock the user-selected language at utterance start (never detect)
                 st.update(active=True, utt_start=now, last_partial=0.0, last_text="",
                           first_partial=False, lang=self._asr_lang_for_mode())
-            # AMBIENT/CAPTIONS: detect language once (on ~LANG_LOCK_S of speech), then lock
-            if st["lang"] is None and (now - st["utt_start"]) >= 0.6:
-                win = self._mic.snapshot(min(now - st["utt_start"] + 0.3, config.LANG_LOCK_S))
-                st["lang"], _ = self._fast.detect(win)
             if now - st["last_partial"] >= config.PARTIAL_INTERVAL_S:
-                dur = min(now - st["utt_start"] + 0.2, config.MAX_UTTERANCE_S + 1)
+                # cap the partial window at 6 s (sliding) so partials stay fast
+                dur = min(now - st["utt_start"] + 0.2, config.PARTIAL_WINDOW_S)
                 samples = self._mic.snapshot(dur)
                 try:
                     raw, conf = self._fast._run(samples, "transcribe", st["lang"], config.ASR_BEAM_PARTIAL)
@@ -252,15 +284,19 @@ class LiveController:
                 self._commit(now, st["utt_start"], st["lang"]); st["active"] = False
         else:
             self._speaking = False
+            self._last_speech_end = st["last_speech"]
             if st["active"] and (now - st["last_speech"]) >= pause_s:
                 self._commit(now, st["utt_start"], st["lang"]); st["active"] = False
 
     def _turn_asr_lang(self) -> str:
         return self.conv["their"] if self.conv["turn"] == "them" else self.conv["mine"]
 
-    def _asr_lang_for_mode(self) -> str | None:
-        """Forced language (TRANSLATE turn) or None to auto-detect+lock (AMBIENT/CAPTIONS)."""
-        return self._turn_asr_lang() if self.app_mode == "translate" else None
+    def _asr_lang_for_mode(self) -> str:
+        """The forced ASR language for the current mode — ALWAYS user-selected, never
+        auto-detected. TRANSLATE: their/mine by turn. AMBIENT/CAPTIONS: src_lang."""
+        if self.app_mode == "translate":
+            return self._turn_asr_lang()
+        return self.src_lang
 
     def _rtl(self, lang: str) -> bool:
         return lang in config.RTL_LANGS
@@ -270,8 +306,8 @@ class LiveController:
             return
         if (now - utt_start) < config.MIN_SEGMENT_S:  # drop sub-0.6s blips
             return
-        samples = self._mic.snapshot(min(now - utt_start + 0.4, config.MAX_UTTERANCE_S + 1))
-        lang = utt_lang or self._fast.detect(samples)[0]
+        samples = self._mic.snapshot(min(now - utt_start + 0.4, config.PARTIAL_WINDOW_S))
+        lang = utt_lang or self._asr_lang_for_mode()  # always user-selected, never detect
         t0 = time.perf_counter()
         try:
             raw, conf = self._fast._run(samples, "transcribe", lang, config.ASR_BEAM_COMMIT)
@@ -296,6 +332,7 @@ class LiveController:
             "matched": [], "alert": False, "divider": divider,
             "timing": {"commit_ms": commit_ms, "partial_ms": self.timing.get("partial_ms")}, "ts": _ms(),
         })
+        self._refine_gen = cid  # latest-wins: only this (newest) line may refine
         ctx = {"app_mode": self.app_mode, "read_lang": self.read_lang, "conv": dict(self.conv),
                "announcements": (self.app_mode == "ambient")}
         threading.Thread(target=self._refine, args=(samples, lang, original, cid, ctx),
@@ -303,11 +340,15 @@ class LiveController:
 
     def _refine(self, samples, lang: str, original_fast: str, cid: int, ctx: dict) -> None:
         t0 = time.perf_counter()
+        if cid != self._refine_gen:  # a newer line already committed — drop this one
+            return
         try:  # accurate re-transcribe (small, beam 1)
             raw, conf = self._accurate._run(samples, "transcribe", lang, 1)
             original = _clean(raw, conf) or original_fast
         except Exception:
             original = original_fast
+        if cid != self._refine_gen:  # became stale during the slow re-transcribe
+            return
         # English via whisper translate (xx->en) — no LLM on this path
         tr_ms = None
         if lang == "en":

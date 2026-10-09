@@ -13,14 +13,17 @@ LLM default qwen2.5:1.5b (measured 9.1 tok/s); 3b only if fast enough under load
 
 from __future__ import annotations
 
-# --- Languages (detect among these only) ---
-ASR_LANGS = ["en", "tl", "ar", "es"]
-LANG_NAMES = {"en": "English", "tl": "Tagalog", "ar": "Arabic", "es": "Spanish"}
+# --- Languages: ONLY English, Tagalog, Arabic. No auto-detect anywhere; the
+# user-selected language is always passed as language=<code> to every transcribe. ---
+ASR_LANGS = ["en", "tl", "ar"]
+LANG_NAMES = {"en": "English", "tl": "Tagalog", "ar": "Arabic"}
 RTL_LANGS = {"ar", "he", "fa", "ur"}  # render right-to-left
 
 # --- Conversation mode (explicit languages, turn-based; no auto-guessing) ---
 # their = the other person's language; mine = the user's language; turn = who speaks.
 CONV_DEFAULT = {"their": "ar", "mine": "en", "turn": "them"}
+# AMBIENT/CAPTIONS: the spoken language (user-picked, no auto-detect) + read language.
+SRC_LANG_DEFAULT = "en"
 
 # --- ASR models (multilingual; NOT the .en models) ---
 # Two-tier: FAST drives partials + the instant commit; ACCURATE refines in the
@@ -43,6 +46,7 @@ RING_SECONDS = 30            # RAM ring buffer length (privacy: last 30 s only)
 LOOP_TICK_S = 0.25           # how often the worker checks VAD state
 PARTIAL_INTERVAL_S = 0.7     # stream a partial this often while speaking
 MAX_UTTERANCE_S = 12.0       # force a commit if speech runs this long
+PARTIAL_WINDOW_S = 6.0       # cap the sliding partial/commit window (speed)
 PAUSE_SILENCE_MS = 450       # commit after this much trailing silence
 MIN_SEGMENT_S = 0.6          # drop utterances shorter than this (noise blips)
 VAD_THRESHOLD = 0.5
@@ -65,9 +69,11 @@ TAGLISH_PROMPT = (
 )
 INITIAL_PROMPTS = {"en": EN_PROMPT, "tl": TAGLISH_PROMPT}
 
-# --- LLM (Ollama) ---
+# --- LLM (Ollama) --- qwen2.5:3b removed entirely (RAM). Only 1.5b, lazy, 5m idle.
 LLM_DEFAULT = "qwen2.5:1.5b"
-LLM_HEAVY = "qwen2.5:3b"
+LLM_HEAVY = "qwen2.5:1.5b"   # kept as an alias; 3b is gone
+LLM_KEEP_ALIVE = "5m"        # unload after 5 min idle (was -1 = never, a RAM hog)
+IDLE_SECONDS = 10.0          # recall embeddings + insights only after this much silence
 
 # --- Alerts (heard-your-name / announcements) ---
 ALERT_KEYWORDS = [

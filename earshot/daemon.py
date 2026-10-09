@@ -30,7 +30,7 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
-from . import brand, netcut
+from . import brand, config, netcut
 from .live import LiveController
 from .localclient import counters as net_counters
 
@@ -348,10 +348,16 @@ def _live_page(token: str) -> str:
           <button class="cv" data-mode="ambient">Ambient</button><button class="cv" data-mode="captions">Captions</button>
           <button class="cv" data-mode="translate">Translate</button>
         </div>
-        <div id="readWrap"><div style="font:400 11px/1 ui-monospace,monospace;color:var(--sage);text-transform:uppercase;margin-bottom:6px">I read</div>
+        <div id="readWrap">
+        <div style="font:400 11px/1 ui-monospace,monospace;color:var(--sage);text-transform:uppercase;margin-bottom:6px">Spoken</div>
+        <div id="srcChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+          <button class="cv" data-src="en">English</button><button class="cv" data-src="tl">Tagalog</button>
+          <button class="cv" data-src="ar">Arabic</button>
+        </div>
+        <div style="font:400 11px/1 ui-monospace,monospace;color:var(--sage);text-transform:uppercase;margin-bottom:6px">I read</div>
         <div id="readChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
           <button class="cv" data-read="en">English</button><button class="cv" data-read="tl">Tagalog</button>
-          <button class="cv" data-read="es">Spanish</button><button class="cv" data-read="ar">Arabic</button>
+          <button class="cv" data-read="ar">Arabic</button>
         </div></div>
       </div>
       <div class="card" style="margin-top:16px" id="insightCard">
@@ -367,12 +373,12 @@ def _live_page(token: str) -> str:
         <div style="font:400 11px/1 ui-monospace,monospace;color:var(--sage);text-transform:uppercase;margin-bottom:6px">They speak</div>
         <div id="theirChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
           <button class="cv" data-their="ar">Arabic</button><button class="cv" data-their="tl">Tagalog</button>
-          <button class="cv" data-their="es">Spanish</button><button class="cv" data-their="en">English</button>
+          <button class="cv" data-their="en">English</button>
         </div>
         <div style="font:400 11px/1 ui-monospace,monospace;color:var(--sage);text-transform:uppercase;margin-bottom:6px">I speak</div>
         <div id="mineChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
           <button class="cv" data-mine="en">English</button><button class="cv" data-mine="tl">Tagalog</button>
-          <button class="cv" data-mine="es">Spanish</button><button class="cv" data-mine="ar">Arabic</button>
+          <button class="cv" data-mine="ar">Arabic</button>
         </div>
         <div style="display:flex;gap:8px;margin-bottom:8px">
           <button class="cv turn" data-turn="them" style="flex:1;height:40px">Them</button>
@@ -447,7 +453,7 @@ def _live_page(token: str) -> str:
     }} else if (m.type === 'conv'){{
       curConv = {{their:m.their, mine:m.mine, turn:m.turn}}; syncConv();
     }} else if (m.type === 'appmode'){{
-      curMode = m.app_mode; curRead = m.read_lang; syncConv();
+      curMode = m.app_mode; curRead = m.read_lang; curSrc = m.src_lang || curSrc; syncConv();
     }} else if (m.type === 'insight'){{
       window._insights = (window._insights||[]); window._insights.push(m); renderInsights();
     }} else if (m.type === 'event'){{
@@ -470,12 +476,13 @@ def _live_page(token: str) -> str:
   document.getElementById('counterBtn').onclick = () => setMode('counter');
 
   // conversation + mode controls
-  let curConv = {{their:'ar', mine:'en', turn:'them'}}, curMuted=false, curMode='ambient', curRead='en';
+  let curConv = {{their:'ar', mine:'en', turn:'them'}}, curMuted=false, curMode='ambient', curRead='en', curSrc='en';
   function post(path, body){{ return fetch(path, {{method:'POST', headers:{{'content-type':'application/json'}}, body:JSON.stringify(body||{{}})}}); }}
   function esc(s){{ return (s||'').replace(/[&<>]/g,c=>({{'&':'&amp;','<':'&lt;','>':'&gt;'}}[c])); }}
   function syncConv(){{
     document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('on', b.dataset.mode===curMode));
     document.querySelectorAll('[data-read]').forEach(b=>b.classList.toggle('on', b.dataset.read===curRead));
+    document.querySelectorAll('[data-src]').forEach(b=>b.classList.toggle('on', b.dataset.src===curSrc));
     document.querySelectorAll('[data-their]').forEach(b=>b.classList.toggle('on', b.dataset.their===curConv.their));
     document.querySelectorAll('[data-mine]').forEach(b=>b.classList.toggle('on', b.dataset.mine===curConv.mine));
     document.querySelectorAll('[data-turn]').forEach(b=>b.classList.toggle('on', b.dataset.turn===curConv.turn));
@@ -499,13 +506,14 @@ def _live_page(token: str) -> str:
   }}
   document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{{ post('/appmode',{{app_mode:b.dataset.mode}}); curMode=b.dataset.mode; syncConv(); }});
   document.querySelectorAll('[data-read]').forEach(b=>b.onclick=()=>{{ post('/appmode',{{read_lang:b.dataset.read}}); curRead=b.dataset.read; syncConv(); }});
+  document.querySelectorAll('[data-src]').forEach(b=>b.onclick=()=>{{ post('/appmode',{{src_lang:b.dataset.src}}); curSrc=b.dataset.src; syncConv(); }});
   document.querySelectorAll('[data-their]').forEach(b=>b.onclick=()=>{{ post('/conv',{{their:b.dataset.their}}); curConv.their=b.dataset.their; syncConv(); }});
   document.querySelectorAll('[data-mine]').forEach(b=>b.onclick=()=>{{ post('/conv',{{mine:b.dataset.mine}}); curConv.mine=b.dataset.mine; syncConv(); }});
   document.querySelectorAll('[data-turn]').forEach(b=>b.onclick=()=>{{ post('/conv',{{turn:b.dataset.turn}}); curConv.turn=b.dataset.turn; syncConv(); }});
   document.getElementById('catchBtn').onclick=()=>post('/catchup');
   document.getElementById('insightBtn').onclick=()=>post('/insight');
   document.getElementById('muteBtn').onclick=()=>post(curMuted?'/unmute':'/mute');
-  fetch('/conv').then(r=>r.json()).then(c=>{{ curConv={{their:c.their,mine:c.mine,turn:c.turn}}; curMuted=!!c.muted; curMode=c.app_mode||curMode; curRead=c.read_lang||curRead; syncConv(); }}).catch(()=>{{}});
+  fetch('/conv').then(r=>r.json()).then(c=>{{ curConv={{their:c.their,mine:c.mine,turn:c.turn}}; curMuted=!!c.muted; curMode=c.app_mode||curMode; curRead=c.read_lang||curRead; curSrc=c.src_lang||curSrc; syncConv(); }}).catch(()=>{{}});
   fetch('/insights').then(r=>r.json()).then(j=>{{ window._insights=j.insights||[]; renderInsights(); }}).catch(()=>{{}});
 
   async function doRecall(){{
@@ -625,11 +633,13 @@ def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[Fa
         return JSONResponse({
             **controller.conv, "muted": controller.muted, "state": controller.state,
             "app_mode": controller.app_mode, "read_lang": controller.read_lang,
+            "src_lang": controller.src_lang,
         })
 
     async def _appmode(request: Request) -> JSONResponse:
         body = await request.json()
-        return JSONResponse(controller.set_app_mode(body.get("app_mode"), body.get("read_lang")))
+        return JSONResponse(controller.set_app_mode(
+            body.get("app_mode"), body.get("read_lang"), body.get("src_lang")))
 
     async def _insight() -> JSONResponse:
         return JSONResponse(await run_in_threadpool(controller.make_insight))
@@ -827,9 +837,10 @@ async def _insight_timer(controller: LiveController) -> None:
     """Every 10 min in AMBIENT live mode, auto-create an insight card."""
     while True:
         await asyncio.sleep(600)
-        # only when idle (never while speaking) — insights must not steal CPU from ASR
+        idle = (time.monotonic() - controller._last_speech_end) >= config.IDLE_SECONDS
+        # only when idle >10s (never while speaking) — insights must not steal CPU from ASR
         if (controller.mode == "live" and controller.app_mode == "ambient"
-                and not controller.muted and not controller._speaking):
+                and not controller.muted and not controller._speaking and idle):
             await run_in_threadpool(controller.make_insight)
 
 
@@ -843,6 +854,21 @@ async def _proof_refresher(hub: Hub) -> None:
         except Exception:
             pass
         await asyncio.sleep(5.0)
+
+
+async def _rss_logger(hub: Hub) -> None:
+    """Log Earshot+Ollama resident memory every 30 s (target < 3 GB total)."""
+    from . import privacy
+
+    while True:
+        try:
+            r = await run_in_threadpool(privacy.rss_mb)
+            hub.latest_proof = {**(hub.latest_proof or {}), **r}
+            flag = "" if r["total_mb"] < 3000 else "  !! OVER 3GB"
+            print(f"[rss] earshot {r['earshot_mb']}MB + ollama {r['ollama_mb']}MB = {r['total_mb']}MB{flag}")
+        except Exception:
+            pass
+        await asyncio.sleep(30.0)
 
 
 async def _serve_async(hub: Hub, controller: LiveController, *, tick: bool, start_live: bool) -> None:
@@ -862,6 +888,7 @@ async def _serve_async(hub: Hub, controller: LiveController, *, tick: bool, star
     coros.append(controller.watch_pacer())  # drives the watch in live mode
     coros.append(_proof_refresher(hub))      # privacy counters off the request path
     coros.append(_insight_timer(controller)) # 10-min ambient insight cards
+    coros.append(_rss_logger(hub))           # RAM watch (<3 GB)
     await asyncio.gather(*coros)
 
 
@@ -881,6 +908,16 @@ def serve(*, tick: bool = True, start_live: bool = False, demo: bool = False) ->
     print(f"  phone     : {url}   (scan the QR below on your iPhone)")
     print(f"  (phone token auto; manual: {url}?t={hub.token})")
     print(f"  mode      : {'live (mic open)' if start_live else 'counter (film) — toggle on /live'}")
+    if demo:
+        print("  warming models (one dummy inference each)…")
+        wt = controller.warmup()
+        print(f"  warm: fast {wt.get('fast')}ms · accurate {wt.get('accurate')}ms · llm1.5b {wt.get('llm_1.5b')}ms")
+        try:
+            from . import privacy
+            r = privacy.rss_mb()
+            print(f"  RAM : earshot {r['earshot_mb']}MB + ollama {r['ollama_mb']}MB = {r['total_mb']}MB (target <3000)")
+        except Exception:
+            pass
     try:
         print(qr_terminal(url))
     except Exception:

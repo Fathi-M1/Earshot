@@ -25,10 +25,10 @@ WHISPER_ROOT = REPO_ROOT / "models" / "whisper"
 BENCH_TXT = REPO_ROOT / "docs" / "bench.txt"
 
 OLLAMA = "http://127.0.0.1:11434"
-# Multilingual (auto-detect) demo languages: English, Tagalog, Arabic, Spanish.
-DEFAULT_ASR_MODELS = ["small", "base"]
-DEFAULT_LLM_MODELS = ["qwen2.5:1.5b", "qwen2.5:3b"]
-KNOWN_LANGS = {"en", "tl", "ar", "es"}
+# Demo languages: English, Tagalog, Arabic.
+DEFAULT_ASR_MODELS = ["tiny", "base", "small"]
+DEFAULT_LLM_MODELS = ["qwen2.5:1.5b"]
+KNOWN_LANGS = {"en", "tl", "ar"}
 
 
 # ---------------------------------------------------------------- ASR ----------

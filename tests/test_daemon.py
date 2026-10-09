@@ -113,10 +113,10 @@ def test_conv_endpoint_sets_and_gets():
     controller = daemon.LiveController(hub)
     dash, _ = daemon.build_apps(hub, controller)
     client = TestClient(dash)
-    r = client.post("/conv", json={"their": "es", "turn": "me"})
-    assert r.json()["their"] == "es" and r.json()["turn"] == "me"
+    r = client.post("/conv", json={"their": "tl", "turn": "me"})
+    assert r.json()["their"] == "tl" and r.json()["turn"] == "me"
     g = client.get("/conv").json()
-    assert g["their"] == "es" and g["turn"] == "me" and "muted" in g
+    assert g["their"] == "tl" and g["turn"] == "me" and "muted" in g
 
 
 def test_qr_and_lan_ip():
@@ -139,9 +139,10 @@ def test_appmode_endpoint():
     controller = daemon.LiveController(hub)
     dash, _ = daemon.build_apps(hub, controller)
     client = TestClient(dash)
-    r = client.post("/appmode", json={"app_mode": "captions", "read_lang": "ar"})
-    assert r.json() == {"app_mode": "captions", "read_lang": "ar"}
-    assert client.get("/conv").json()["app_mode"] == "captions"
+    r = client.post("/appmode", json={"app_mode": "captions", "read_lang": "ar", "src_lang": "tl"})
+    assert r.json() == {"app_mode": "captions", "read_lang": "ar", "src_lang": "tl"}
+    g = client.get("/conv").json()
+    assert g["app_mode"] == "captions" and g["src_lang"] == "tl"
 
 
 def test_question_to_me_detection():

@@ -83,6 +83,20 @@ def _cached_connections(ttl: float = 3.0) -> list[str]:
     return val
 
 
+def rss_mb() -> dict:
+    """Resident memory (MB) for our process(es) + Ollama. Must stay < 3 GB total."""
+    ours = sum(_rss(pid) for pid in our_pids())
+    oll = sum(_rss(pid) for pid in ollama_pids())
+    return {"earshot_mb": round(ours), "ollama_mb": round(oll), "total_mb": round(ours + oll)}
+
+
+def _rss(pid: int) -> float:
+    try:
+        return psutil.Process(pid).memory_info().rss / 1024 / 1024
+    except Exception:
+        return 0.0
+
+
 def proof() -> dict:
     c = localclient.counters()
     pub = _cached_connections()
