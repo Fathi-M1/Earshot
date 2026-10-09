@@ -221,14 +221,15 @@ class LiveController:
 
         timings = {}
         dummy = np.zeros(int(1.0 * config.SAMPLE_RATE), dtype=np.float32)
-        for name, tr in (("fast", self._fast), ("accurate", self._accurate)):
-            t0 = time.perf_counter()
-            try:
-                tr.load()
-                tr._run(dummy, "transcribe", "en", 1)
-            except Exception:
-                pass
-            timings[name] = int((time.perf_counter() - t0) * 1000)
+        # Warm the FAST tier (always used). The small model stays lazy — it only
+        # loads on the first ar/tl line, keeping English sessions under the RAM cap.
+        t0 = time.perf_counter()
+        try:
+            self._fast.load()
+            self._fast._run(dummy, "transcribe", "en", 1)
+        except Exception:
+            pass
+        timings["fast"] = int((time.perf_counter() - t0) * 1000)
         t0 = time.perf_counter()
         llm.prewarm(config.LLM_DEFAULT)
         timings["llm_1.5b"] = int((time.perf_counter() - t0) * 1000)
@@ -247,10 +248,7 @@ class LiveController:
             recall._embed("warm", "search_document: ")
         except Exception:
             pass
-        try:
-            self._accurate.load()  # small, for background refine (load last)
-        except Exception:
-            pass
+        # NOTE: small (accurate) stays lazy — loads on the first ar/tl line only.
         self._emit({"type": "event", "kind": "warm", "detail": "models ready", "ts": _ms()})
 
     def _tick(self, st: dict, pause_s: float) -> None:
@@ -342,13 +340,18 @@ class LiveController:
         t0 = time.perf_counter()
         if cid != self._refine_gen:  # a newer line already committed — drop this one
             return
-        try:  # accurate re-transcribe (small, beam 1)
-            raw, conf = self._accurate._run(samples, "transcribe", lang, 1)
-            original = _clean(raw, conf) or original_fast
-        except Exception:
+        # English: tiny == small accuracy (measured WER 0.04 on clean en) at 6x the
+        # speed, so DON'T run the slow small re-transcribe for en — tiny is final.
+        if lang == "en":
             original = original_fast
-        if cid != self._refine_gen:  # became stale during the slow re-transcribe
-            return
+        else:
+            try:  # ar/tl: small re-transcribe for accuracy (background, latest-wins)
+                raw, conf = self._accurate._run(samples, "transcribe", lang, 1)
+                original = _clean(raw, conf) or original_fast
+            except Exception:
+                original = original_fast
+            if cid != self._refine_gen:  # became stale during the slow re-transcribe
+                return
         # English via whisper translate (xx->en) — no LLM on this path
         tr_ms = None
         if lang == "en":

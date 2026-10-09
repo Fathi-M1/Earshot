@@ -50,10 +50,29 @@ class AsrRow:
 
 
 def _decode(path: Path):
-    """Decode a WAV into a 16 kHz mono float32 numpy array, in RAM only."""
-    from faster_whisper.audio import decode_audio
+    """Decode a WAV into a 16 kHz mono float32 numpy array, in RAM only (stdlib +
+    numpy; avoids faster_whisper.decode_audio which needs a matching PyAV)."""
+    import wave
 
-    return decode_audio(str(path), sampling_rate=16000)
+    import numpy as np
+
+    with wave.open(str(path), "rb") as w:
+        rate = w.getframerate()
+        chans = w.getnchannels()
+        width = w.getsampwidth()
+        raw = w.readframes(w.getnframes())
+    dtype = {1: np.int8, 2: np.int16, 4: np.int32}.get(width, np.int16)
+    data = np.frombuffer(raw, dtype=dtype).astype(np.float32)
+    if width == 2:
+        data /= 32768.0
+    elif width == 4:
+        data /= 2147483648.0
+    if chans > 1:
+        data = data.reshape(-1, chans).mean(axis=1)
+    if rate != 16000:  # linear resample to 16 kHz
+        n = int(len(data) * 16000 / rate)
+        data = np.interp(np.linspace(0, len(data), n, endpoint=False), np.arange(len(data)), data).astype(np.float32)
+    return data
 
 
 def _lang_from_name(name: str) -> str:

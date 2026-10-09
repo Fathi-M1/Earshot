@@ -62,3 +62,62 @@ latency  partial=2454ms commit=2315ms translate=Nonems e2e=2315ms (02:12:26)
 latency  partial=1813ms commit=2315ms translate=Nonems e2e=2315ms (02:12:49)
 latency  partial=1813ms commit=2337ms translate=Nonems e2e=2337ms (02:13:08)
 latency  partial=2750ms commit=2337ms translate=Nonems e2e=2337ms (02:13:18)
+latency  partial=3608ms commit=1523ms translate=Nonems e2e=1523ms (02:18:58)
+latency  partial=3608ms commit=20255ms translate=Nonems e2e=20255ms (02:19:23)
+latency  partial=3608ms commit=8218ms translate=Nonems e2e=8218ms (02:19:38)
+latency  partial=3608ms commit=2593ms translate=Nonems e2e=2593ms (02:20:15)
+latency  partial=1922ms commit=9350ms translate=Nonems e2e=9350ms (02:20:29)
+latency  partial=1922ms commit=10093ms translate=Nonems e2e=10093ms (02:20:53)
+latency  partial=2500ms commit=13736ms translate=Nonems e2e=13736ms (02:21:20)
+latency  partial=2500ms commit=15263ms translate=Nonems e2e=15263ms (02:21:49)
+latency  partial=0ms commit=2508ms translate=Nonems e2e=2508ms (02:22:31)
+latency  partial=875ms commit=4913ms translate=3192ms e2e=4913ms (02:24:24)
+latency  partial=875ms commit=2543ms translate=Nonems e2e=2543ms (02:28:12)
+latency  partial=875ms commit=2279ms translate=Nonems e2e=2279ms (02:29:40)
+latency  partial=875ms commit=720ms translate=2096ms e2e=720ms (02:34:15)
+latency  partial=875ms commit=720ms translate=Nonems e2e=720ms (02:34:27)
+latency  partial=0ms commit=1957ms translate=3825ms e2e=1957ms (02:34:53)
+latency  partial=0ms commit=1447ms translate=Nonems e2e=1447ms (02:35:30)
+latency  partial=1327ms commit=575ms translate=Nonems e2e=575ms (02:35:58)
+latency  partial=1375ms commit=1989ms translate=Nonems e2e=1989ms (02:36:12)
+latency  partial=0ms commit=2659ms translate=Nonems e2e=2659ms (02:39:23)
+latency  partial=1922ms commit=667ms translate=Nonems e2e=667ms (02:40:59)
+latency  partial=2218ms commit=2531ms translate=Nonems e2e=2531ms (02:41:38)
+latency  partial=0ms commit=1733ms translate=Nonems e2e=1733ms (02:42:00)
+latency  partial=0ms commit=1710ms translate=Nonems e2e=1710ms (02:42:14)
+latency  partial=0ms commit=2183ms translate=Nonems e2e=2183ms (02:42:44)
+latency  partial=0ms commit=2183ms translate=Nonems e2e=2183ms (02:43:00)
+latency  partial=25468ms commit=3656ms translate=Nonems e2e=3656ms (02:43:14)
+latency  partial=25468ms commit=3656ms translate=Nonems e2e=3656ms (02:43:22)
+latency  partial=25468ms commit=800ms translate=Nonems e2e=800ms (02:47:13)
+latency  partial=25468ms commit=800ms translate=Nonems e2e=800ms (02:47:24)
+latency  partial=10359ms commit=2466ms translate=Nonems e2e=2466ms (02:47:54)
+latency  partial=1092ms commit=4063ms translate=Nonems e2e=4063ms (02:48:15)
+
+# bench 2026-10-10 03:15:39
+## ASR (multilingual faster-whisper int8, cpu_threads=4, VAD on, warm; RTF=proc/audio)
+model   wav              file  det  audio    rtf  tr_rtf    wer  text
+tiny    en-syn-1.wav       en   en   2.40  0.237       —   0.12  Fathi, the quiz is on Monday at 9.
+tiny    en-syn-2.wav       en   en   2.55  0.209       —   0.00  The deadline for the assignment is next …
+tiny    en-syn-3.wav       en   en   2.55  0.227       —   0.00  Attention passengers, the train is now b…
+base    en-syn-1.wav       en   en   2.40  0.452       —   0.38  Fathi. The quiz is on Monday at 9am!
+base    en-syn-2.wav       en   en   2.55  0.421       —   0.00  The deadline for the assignment is next …
+base    en-syn-3.wav       en   en   2.55  0.433       —   0.00  Attention passengers, the train is now b…
+small   en-syn-1.wav       en   en   2.40  1.401       —   0.12  Fathi, the quiz is on Monday at 9.
+small   en-syn-2.wav       en   en   2.55  1.357       —   0.00  The deadline for the assignment is next …
+small   en-syn-3.wav       en   en   2.55  1.329       —   0.00  Attention passengers, the train is now b…
+
+mean transcribe RTF by model x detected-language (pass <= 0.5):
+  base      en  0.435  PASS  (n=3)
+  small     en  1.362  FAIL  (n=3)
+  tiny      en  0.224  PASS  (n=3)
+
+mean transcribe RTF by model (all languages):
+  base    0.435  PASS  -> pick biggest PASS
+  small   1.362  FAIL  -> pick biggest PASS
+  tiny    0.224  PASS  -> pick biggest PASS
+
+## Ollama (tokens/s from eval metrics; options num_thread=2)
+model             tokens   eval_s    tok/s   wall_s
+
+localclient bytes sent/recv: 0 / 0 (requests 0)
