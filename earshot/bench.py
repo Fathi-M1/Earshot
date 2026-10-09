@@ -25,10 +25,10 @@ WHISPER_ROOT = REPO_ROOT / "models" / "whisper"
 BENCH_TXT = REPO_ROOT / "docs" / "bench.txt"
 
 OLLAMA = "http://127.0.0.1:11434"
-# Multilingual models (auto-detect): English, Tagalog, Arabic. NOT the .en models.
-DEFAULT_ASR_MODELS = ["base", "small"]
+# Multilingual (auto-detect) demo languages: English, Tagalog, Arabic, Spanish.
+DEFAULT_ASR_MODELS = ["small", "base"]
 DEFAULT_LLM_MODELS = ["qwen2.5:1.5b", "qwen2.5:3b"]
-KNOWN_LANGS = {"en", "tl", "ar"}
+KNOWN_LANGS = {"en", "tl", "ar", "es"}
 
 
 # ---------------------------------------------------------------- ASR ----------
@@ -49,18 +49,6 @@ class AsrRow:
     english: str
 
 
-def _load_model(name: str):
-    from faster_whisper import WhisperModel
-
-    return WhisperModel(
-        name,
-        device="cpu",
-        compute_type="int8",
-        cpu_threads=4,
-        download_root=str(WHISPER_ROOT),
-    )
-
-
 def _decode(path: Path):
     """Decode a WAV into a 16 kHz mono float32 numpy array, in RAM only."""
     from faster_whisper.audio import decode_audio
@@ -76,20 +64,6 @@ def _lang_from_name(name: str) -> str:
             if head in KNOWN_LANGS:
                 return head
     return stem[:2] if stem[:2] in KNOWN_LANGS else "?"
-
-
-def _run(model, samples, task: str, language: str | None = None):
-    segments, info = model.transcribe(
-        samples,
-        task=task,
-        language=language,
-        beam_size=1,
-        vad_filter=True,
-        condition_on_previous_text=False,
-        no_speech_threshold=0.6,
-    )
-    text = " ".join(s.text.strip() for s in segments).strip()
-    return text, info
 
 
 def _wer(ref: str, hyp: str) -> float | None:
@@ -109,26 +83,31 @@ def bench_asr(models: list[str] | None = None) -> list[AsrRow]:
             f"No WAVs in {AUDIO_DIR}. Record short clips there named by language, "
             f"e.g. en-1.wav, tl-1.wav, ar-1.wav (16 kHz mono; a matching <name>.txt enables WER)."
         )
+    from . import asr, config
+    from .asr import _clean
+
     rows: list[AsrRow] = []
     decoded = {w: _decode(w) for w in wavs}
+    beam = config.ASR_BEAM_COMMIT  # bench mirrors the live commit pass (accurate)
     for name in models:
-        model = _load_model(name)
-        _run(model, decoded[wavs[0]], task="transcribe")  # warm (not timed)
+        t = asr.Transcriber(name)
+        t.load()
+        t.caption(decoded[wavs[0]], beam_size=beam)  # warm (not timed)
         for w in wavs:
             samples = decoded[w]
             audio_s = len(samples) / 16000.0
+            lang_detected, _p = t.detect(samples)  # restricted to en/tl/ar/es
             t0 = time.perf_counter()
-            original, info = _run(model, samples, task="transcribe")
+            raw, conf = t._run(samples, "transcribe", lang_detected, beam)
             proc_s = time.perf_counter() - t0
-            lang_detected = getattr(info, "language", "") or ""
-            # English for the watch/lock screen (translate when non-English).
+            original = _clean(raw, conf)
             translate_rtf = None
-            if lang_detected == "en":
-                english = original
-            else:
+            english = original
+            if lang_detected != "en" and original:
                 t1 = time.perf_counter()
-                english, _ = _run(model, samples, task="translate", language=lang_detected or None)
+                raw_en, conf_en = t._run(samples, "translate", lang_detected, beam)
                 translate_rtf = round((time.perf_counter() - t1) / audio_s, 3) if audio_s else None
+                english = _clean(raw_en, conf_en) or original
             ref_file = w.with_suffix(".txt")
             wer = _wer(ref_file.read_text(encoding="utf-8").strip(), original) if ref_file.exists() else None
             rows.append(

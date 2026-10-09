@@ -2,71 +2,85 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#12241A">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>remote</title>
 <style>
+  @font-face{
+    font-family:"Host Grotesk"; src:url("/font/host-grotesk.ttf") format("truetype");
+    font-weight:400 700; font-display:swap;
+  }
   :root{
-    --forest:#1F3A24; --forest-deep:#12241A; --moss:#3D5A40; --sage:#A9B89C;
+    --forest:#1F3A24; --fd:#12241A; --moss:#3D5A40; --sage:#A9B89C;
     --beige:#DDE3D3; --paper:#EEF1E8; --glow:#7FB3D5; --needs:#C9A45C;
-    color-scheme: dark;
+    color-scheme:dark;
   }
   *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; height:100%; }
   body{
-    margin:0; background:var(--forest-deep); color:var(--beige);
-    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
-    min-height:100vh; min-height:100dvh;
+    background:var(--fd); color:var(--beige);
+    font-family:"Host Grotesk", ui-sans-serif, system-ui, -apple-system, sans-serif;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    overflow:hidden;
   }
-  .screen{ display:none; flex-direction:column; align-items:center; justify-content:center;
-           min-height:100vh; min-height:100dvh; gap:18px; padding:28px; text-align:center; }
+  .screen{ display:none; flex-direction:column; height:100vh; height:100dvh; }
   .screen.on{ display:flex; }
+  /* start */
+  #start{ align-items:center; justify-content:center; gap:18px; padding:28px; text-align:center; }
   .mark{ width:56px; height:56px; border-radius:16px; background:var(--forest);
          display:flex; align-items:center; justify-content:center; }
   .mark .dot{ width:16px; height:16px; border-radius:50%; background:var(--glow);
               box-shadow:0 0 18px 4px rgba(127,179,213,.6); }
   h1{ font-size:28px; font-weight:600; letter-spacing:-0.02em; margin:0; }
-  .muted{ color:var(--sage); font-size:15px; line-height:1.4; max-width:320px; }
-  button.start{ margin-top:8px; height:56px; padding:0 28px; border-radius:14px; border:0;
-                background:var(--beige); color:var(--forest-deep); font-size:17px; font-weight:600; }
+  .muted{ color:var(--sage); font-size:15px; line-height:1.45; max-width:320px; }
+  button.start{ margin-top:8px; height:56px; padding:0 30px; border-radius:14px; border:0;
+                background:var(--beige); color:var(--fd); font-size:17px; font-weight:600; }
   /* main */
-  #main{ justify-content:flex-start; gap:14px; padding-top:28px; }
-  .topbar{ width:100%; display:flex; align-items:center; gap:8px; font:400 11px/1.3 ui-monospace,monospace;
-           letter-spacing:0.1em; text-transform:uppercase; color:var(--sage); }
-  .cdot{ width:7px; height:7px; border-radius:50%; background:var(--needs); }
+  #main{ padding:14px 18px; }
+  .top{ display:flex; align-items:center; gap:8px; font:400 11px/1 ui-monospace,monospace;
+        letter-spacing:.1em; text-transform:uppercase; color:var(--sage); flex:0 0 auto; }
+  .cdot{ width:8px; height:8px; border-radius:50%; background:var(--needs); }
   .cdot.live{ background:#8FA876; }
-  .art{ width:min(100vw - 40px, 360px); aspect-ratio:1/1; border-radius:14px; background:var(--forest);
-        object-fit:cover; }
-  .overline{ font:400 11px/1.3 ui-monospace,monospace; letter-spacing:0.1em; text-transform:uppercase;
-             color:var(--sage); width:100%; }
-  .cur{ font-size:22px; font-weight:600; line-height:1.2; min-height:2.4em; width:100%; }
-  .prev{ font-size:15px; color:var(--sage); width:100%; min-height:1.2em; }
-  .n{ font:600 64px/1 ui-monospace,monospace; font-variant-numeric:tabular-nums; color:var(--beige); }
-  /* resume overlay */
-  #resume{ position:fixed; inset:0; background:rgba(18,36,26,.92); display:none;
+  .lang{ margin-left:auto; border:1px solid var(--sage); border-radius:6px; padding:3px 7px; }
+  .diag{ margin-left:8px; color:var(--moss); }
+  #stack{ flex:1 1 auto; display:flex; flex-direction:column; justify-content:flex-end;
+          gap:14px; overflow:hidden; padding:14px 0; }
+  .line{ }
+  .line .orig{ font-size:clamp(30px,7.2vw,40px); line-height:1.12; font-weight:400; color:var(--sage); }
+  .line.newest .orig{ font-weight:700; color:var(--beige); }
+  .line .eng{ font-size:clamp(15px,3.6vw,19px); line-height:1.25; color:var(--sage); margin-top:4px; }
+  .line.alert .orig{ color:var(--needs); }
+  #partial{ font-size:clamp(22px,5vw,28px); color:var(--moss); font-style:italic;
+            min-height:1.4em; flex:0 0 auto; }
+  /* resume */
+  #resume{ position:fixed; inset:0; background:rgba(18,36,26,.94); display:none;
            align-items:center; justify-content:center; flex-direction:column; gap:12px; }
   #resume.on{ display:flex; }
   #resume button{ height:56px; padding:0 28px; border-radius:14px; border:0;
-                  background:var(--beige); color:var(--forest-deep); font-size:17px; font-weight:600; }
+                  background:var(--beige); color:var(--fd); font-size:17px; font-weight:600; }
 </style>
 </head>
 <body>
-  <!-- Start screen -->
   <div id="start" class="screen on">
     <div class="mark"><div class="dot"></div></div>
     <h1><span id="brand-start">…</span> remote</h1>
-    <p class="muted">Keep this tab open in Safari. Don't add to Home Screen.</p>
+    <p class="muted">Add to Home Screen for full-screen captions, or keep this Safari tab open. Tap Start.</p>
     <button class="start" id="startBtn">Start</button>
   </div>
 
-  <!-- Main screen -->
   <div id="main" class="screen">
-    <div class="topbar"><span class="cdot" id="cdot"></span><span id="conn">connecting…</span></div>
-    <img class="art" id="art" alt="">
-    <div class="overline"><span id="state">—</span> · <span id="time">--:--</span></div>
-    <div class="n" id="n">—</div>
-    <div class="cur" id="cur"></div>
-    <div class="prev" id="prev"></div>
+    <div class="top">
+      <span class="cdot" id="cdot"></span><span id="conn">connecting…</span>
+      <span class="lang" id="lang">—</span>
+      <span class="diag" id="diag"></span>
+    </div>
+    <div id="stack"></div>
+    <div id="partial"></div>
   </div>
 
   <div id="resume"><p class="muted">Audio session stopped.</p><button id="resumeBtn">Tap to resume</button></div>
@@ -76,66 +90,83 @@
   "use strict";
   var qs = new URLSearchParams(location.search);
   var token = qs.get("t") || "";
-  var brand = "earshot", display = "Earshot";
-  var audio = null, ws = null, backoff = 500, lastState = "LISTENING";
+  var display = "Earshot";
+  var audio=null, ws=null, backoff=500, lastState="LISTENING", wakeLock=null;
+  var lines=[]; // committed {orig, eng, lang, alert}
 
-  // Brand name is a variable — fetch it, never hard-code.
   fetch("/config").then(function(r){return r.json();}).then(function(c){
-    brand = c.brand; display = c.displayName;
+    display = c.displayName;
     document.getElementById("brand-start").textContent = display;
     document.title = display + " remote";
-  }).catch(function(){ document.getElementById("brand-start").textContent = "…"; });
+  }).catch(function(){ document.getElementById("brand-start").textContent="…"; });
 
   function show(id){
     document.getElementById("start").classList.toggle("on", id==="start");
     document.getElementById("main").classList.toggle("on", id==="main");
   }
+  function artUrl(state){ return "/art/"+encodeURIComponent(state)+".png"; }
 
-  function artUrl(state){ return "/art/" + encodeURIComponent(state) + ".png"; }
+  // ---- full-screen captions (foreground) ----
+  function renderStack(){
+    var el = document.getElementById("stack");
+    el.innerHTML = "";
+    var show = lines.slice(-3);
+    show.forEach(function(ln, i){
+      var newest = (i === show.length-1);
+      var div = document.createElement("div");
+      div.className = "line" + (newest?" newest":"") + (ln.alert?" alert":"");
+      var eng = (ln.eng && ln.eng !== ln.orig) ? '<div class="eng">→ '+ln.eng+'</div>' : '';
+      div.innerHTML = '<div class="orig">'+ln.orig+'</div>'+eng;
+      el.appendChild(div);
+    });
+    document.getElementById("lang").textContent = show.length ? (show[show.length-1].lang||"—") : "—";
+  }
 
+  // ---- Media Session (lock screen / Garmin) from "track" events ----
   function setMetadata(m){
     if (!("mediaSession" in navigator)) return;
     try {
       navigator.mediaSession.metadata = new MediaMetadata({
-        title: m.title || "",
-        artist: m.artist || "",
-        album: m.album || display,
-        artwork: [{ src: artUrl(m.state || lastState), sizes: "512x512", type: "image/png" }]
+        title: m.title||"", artist: m.artist||"", album: m.album||display,
+        artwork: [{ src: artUrl(m.state||lastState), sizes:"512x512", type:"image/png" }]
       });
-      navigator.mediaSession.playbackState = (m.state === "MUTED") ? "paused" : "playing";
-    } catch (e) {}
+      navigator.mediaSession.playbackState = (m.state==="MUTED") ? "paused" : "playing";
+    } catch(e){}
   }
 
-  function applyTrack(m){
-    lastState = m.state || lastState;
-    document.getElementById("state").textContent = m.state || "";
-    document.getElementById("cur").textContent = m.title || "";
-    document.getElementById("prev").textContent = m.artist || "";
-    document.getElementById("n").textContent = (m.n !== null && m.n !== undefined) ? m.n : "";
-    document.getElementById("time").textContent = new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
-    var art = document.getElementById("art");
-    var next = artUrl(lastState);
-    if (art.getAttribute("data-state") !== lastState){ art.src = next; art.setAttribute("data-state", lastState); }
-    setMetadata(m);
+  function onMsg(m){
+    if (m.type === "track"){
+      lastState = m.state || lastState;
+      setMetadata(m);
+    } else if (m.type === "caption"){
+      if (!m.committed){
+        document.getElementById("partial").textContent =
+          (m.lang? "["+m.lang+"] ":"") + "… " + (m.original||"");
+        return;
+      }
+      document.getElementById("partial").textContent = "";
+      lines.push({ orig:m.original, eng:m.english, lang:m.lang,
+                   alert:(m.matched && m.matched.length>0) });
+      if (lines.length > 20) lines = lines.slice(-20);
+      renderStack();
+    }
   }
 
   function setConn(live){
     document.getElementById("cdot").classList.toggle("live", live);
     document.getElementById("conn").textContent = live ? "live" : "reconnecting…";
   }
-
   function connect(){
-    if (ws && (ws.readyState === 0 || ws.readyState === 1)) return; // one in flight
-    var proto = location.protocol === "https:" ? "wss" : "ws";
-    ws = new WebSocket(proto + "://" + location.host + "/ws/phone?t=" + encodeURIComponent(token));
-    ws.onopen = function(){ setConn(true); backoff = 500; };
-    ws.onmessage = function(e){ try { var m = JSON.parse(e.data); if (m.type === "track") applyTrack(m); } catch(_){} };
-    ws.onclose = function(){ setConn(false); setTimeout(connect, backoff); backoff = Math.min(backoff*2, 8000); };
-    ws.onerror = function(){ try { ws.close(); } catch(_){} };
+    if (ws && (ws.readyState===0 || ws.readyState===1)) return;
+    var proto = location.protocol==="https:" ? "wss":"ws";
+    ws = new WebSocket(proto+"://"+location.host+"/ws/phone?t="+encodeURIComponent(token));
+    ws.onopen = function(){ setConn(true); backoff=500; };
+    ws.onmessage = function(e){ try{ onMsg(JSON.parse(e.data)); }catch(_){} };
+    ws.onclose = function(){ setConn(false); setTimeout(connect, backoff); backoff=Math.min(backoff*2,8000); };
+    ws.onerror = function(){ try{ ws.close(); }catch(_){} };
   }
 
   function startAudio(){
-    // Finite silent file, loop=true, never change src (keeps the iOS Media Session alive).
     audio = new Audio("/silent.wav");
     audio.loop = true;
     try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch(_){}
@@ -143,44 +174,49 @@
     if (p && p.catch) p.catch(function(){ showResume(); });
     audio.onpause = function(){ showResume(); };
   }
-
   function showResume(){ document.getElementById("resume").classList.add("on"); }
   function hideResume(){ document.getElementById("resume").classList.remove("on"); }
 
   function wireMediaSession(){
     if (!("mediaSession" in navigator)) return;
-    // Only play/pause/next/previous — NO seek handlers (they would replace next/prev).
-    navigator.mediaSession.setActionHandler("play", function(){ sendButton("play"); });
-    navigator.mediaSession.setActionHandler("pause", function(){ sendButton("pause"); });
-    navigator.mediaSession.setActionHandler("nexttrack", function(){ sendButton("next"); });
-    navigator.mediaSession.setActionHandler("previoustrack", function(){ sendButton("previous"); });
+    navigator.mediaSession.setActionHandler("play",          function(){ sendButton("catchup"); });
+    navigator.mediaSession.setActionHandler("pause",         function(){ sendButton("mute"); });
+    navigator.mediaSession.setActionHandler("nexttrack",     function(){ sendButton("bookmark"); });
+    navigator.mediaSession.setActionHandler("previoustrack", function(){ sendButton("catchup"); });
   }
-
   function sendButton(action){
-    // P0: button routing lands in P3. Log to console so we can confirm which
-    // events the Garmin actually sends during the P0 button-map test.
     console.log("[button]", action, Date.now());
-    if (ws && ws.readyState === 1) {
-      try { ws.send(JSON.stringify({ type:"button", action:action, source:"iphone", ts: Date.now() })); } catch(_){}
+    if (ws && ws.readyState===1){
+      try{ ws.send(JSON.stringify({type:"button", action:action, source:"iphone", ts:Date.now()})); }catch(_){}
     }
   }
 
+  async function requestWakeLock(){
+    try { if ("wakeLock" in navigator){ wakeLock = await navigator.wakeLock.request("screen"); } } catch(_){}
+  }
+
+  function diag(){
+    var standalone = (window.navigator.standalone === true) ||
+                     (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+    var hasMS = ("mediaSession" in navigator);
+    var txt = (standalone?"standalone":"tab") + " · MS:" + (hasMS?"y":"n");
+    document.getElementById("diag").textContent = txt;
+    console.log("[diag] standalone=", standalone, "mediaSession=", hasMS);
+  }
+
   document.getElementById("startBtn").addEventListener("click", function(){
-    startAudio();
-    wireMediaSession();
-    show("main");
-    connect();
+    startAudio(); wireMediaSession(); requestWakeLock(); diag();
+    show("main"); connect();
   });
   document.getElementById("resumeBtn").addEventListener("click", function(){
-    if (audio){ var p = audio.play(); if (p && p.catch) p.catch(function(){}); }
-    hideResume();
+    if (audio){ var p=audio.play(); if(p&&p.catch)p.catch(function(){}); }
+    requestWakeLock(); hideResume();
   });
-
   document.addEventListener("visibilitychange", function(){
     if (document.visibilityState === "visible"){
-      // Resync: reconnect if needed, nudge audio back.
-      if (audio && audio.paused){ var p = audio.play(); if (p && p.catch) p.catch(showResume); }
-      if (!ws || ws.readyState > 1) connect();
+      if (audio && audio.paused){ var p=audio.play(); if(p&&p.catch)p.catch(showResume); }
+      requestWakeLock();
+      if (!ws || ws.readyState>1) connect();
     }
   });
 })();

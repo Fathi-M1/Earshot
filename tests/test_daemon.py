@@ -66,6 +66,20 @@ def test_phone_serves_config_silent_wav_and_art():
     assert client.get("/art/NOPE.png").status_code == 404
 
 
+def test_phone_pwa_assets():
+    _, _, phone = _apps()
+    client = TestClient(phone)
+    man = client.get("/manifest.webmanifest")
+    assert man.status_code == 200
+    j = man.json()
+    assert j["display"] == "standalone"
+    assert j["short_name"] == "Earshot"
+    assert client.get("/apple-touch-icon.png").status_code == 200
+    assert client.get("/icon-512.png").status_code == 200
+    font = client.get("/font/host-grotesk.ttf")
+    assert font.status_code == 200
+
+
 def test_phone_ws_rejects_bad_token():
     hub, _, phone = _apps()
     client = TestClient(phone)

@@ -23,6 +23,13 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_bar(args: argparse.Namespace) -> int:
+    from . import bar
+
+    bar.run()
+    return 0
+
+
 def _cmd_bench(args: argparse.Namespace) -> int:
     from . import bench
 
@@ -149,6 +156,9 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--no-tick", action="store_true", help="don't emit the P0 counter tick")
     sp.add_argument("--live", action="store_true", help="start in live caption mode (mic open) instead of counter")
     sp.set_defaults(func=_cmd_serve)
+
+    barp = sub.add_parser("bar", help="show the laptop caption bar (connects to a running daemon)")
+    barp.set_defaults(func=_cmd_bar)
 
     bp = sub.add_parser("bench", help="measure ASR RTF/WER and Ollama tokens/s")
     bp.add_argument("--asr-only", action="store_true")

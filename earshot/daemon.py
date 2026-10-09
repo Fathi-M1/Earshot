@@ -235,6 +235,7 @@ def _live_page(token: str) -> str:
   <div class="wrap">
     <div class="card">
       <h2>Live log — every caption, detected language, event</h2>
+      <div id="partial" class="prev" style="min-height:1.4em; color:var(--sage); font-style:italic; margin-bottom:8px"></div>
       <div id="log"></div>
     </div>
     <div>
@@ -273,6 +274,12 @@ def _live_page(token: str) -> str:
       document.getElementById('npArtist').textContent = m.artist || '';
       setState(m.state || '');
     }} else if (m.type === 'caption'){{
+      if (!m.committed){{
+        document.getElementById('partial').textContent =
+          (m.lang? '['+m.lang+'] ' : '') + '… ' + (m.original||'');
+        return;
+      }}
+      document.getElementById('partial').textContent = '';
       const match = (m.matched && m.matched.length) ? 'match' : '';
       const eng = (m.english && m.english !== m.original) ? `<div class="eng">→ ${{m.english}}</div>` : '';
       addRow(`<div class="t">${{hhmmss(m.ts)}}</div><div class="lang">${{m.lang||'?'}}</div>`+
@@ -375,6 +382,51 @@ def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[Fa
     async def phone_config() -> JSONResponse:
         return JSONResponse({"brand": brand.name(), "displayName": brand.display_name()})
 
+    @phone.get("/manifest.webmanifest")
+    async def phone_manifest() -> JSONResponse:
+        disp = brand.display_name()
+        return JSONResponse(
+            {
+                "name": f"{disp} remote",
+                "short_name": disp,
+                "display": "standalone",
+                "orientation": "portrait",
+                "background_color": brand.color("forest-deep"),
+                "theme_color": brand.color("forest-deep"),
+                "start_url": ".",
+                "icons": [
+                    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
+                    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+                ],
+            },
+            media_type="application/manifest+json",
+        )
+
+    def _design_file(name: str, media: str):
+        path = REPO_ROOT / "design" / name
+        if not path.exists():
+            return Response(status_code=404)
+        return FileResponse(path, media_type=media)
+
+    @phone.get("/apple-touch-icon.png")
+    async def phone_apple_icon() -> Response:
+        return _design_file("apple-touch-icon.png", "image/png")
+
+    @phone.get("/icon-192.png")
+    async def phone_icon192() -> Response:
+        return _design_file("icon-192.png", "image/png")
+
+    @phone.get("/icon-512.png")
+    async def phone_icon512() -> Response:
+        return _design_file("icon-512.png", "image/png")
+
+    @phone.get("/font/host-grotesk.ttf")
+    async def phone_font() -> Response:
+        path = REPO_ROOT / "design" / "fonts" / "HostGrotesk-VariableFont_wght.ttf"
+        if not path.exists():
+            return Response(status_code=404)
+        return FileResponse(path, media_type="font/ttf")
+
     @phone.get("/silent.wav")
     async def phone_silent() -> Response:
         return Response(content=_SILENT_WAV, media_type="audio/wav")
@@ -432,6 +484,7 @@ async def _serve_async(hub: Hub, controller: LiveController, *, tick: bool, star
     coros = [s.serve() for s in servers]
     if tick:
         coros.append(_tick_loop(hub, controller))
+    coros.append(controller.watch_pacer())  # drives the watch in live mode
     await asyncio.gather(*coros)
 
 
