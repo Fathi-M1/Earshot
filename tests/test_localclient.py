@@ -42,7 +42,7 @@ def test_get_public_host_refused():
 
 
 @respx.mock
-def test_local_call_counts_bytes():
+def test_local_call_counts_local_not_internet():
     route = respx.post("http://127.0.0.1:11434/api/generate").mock(
         return_value=httpx.Response(200, json={"response": "ok", "eval_count": 3})
     )
@@ -50,6 +50,7 @@ def test_local_call_counts_bytes():
     assert resp.status_code == 200
     assert route.called
     c = localclient.counters()
-    assert c.bytes_sent > 0
-    assert c.bytes_recv > 0
+    # loopback traffic is LOCAL, never counted as internet (the privacy-panel number)
+    assert c.local_sent > 0 and c.local_recv > 0
+    assert c.bytes_sent == 0 and c.internet_sent == 0
     assert c.requests == 1

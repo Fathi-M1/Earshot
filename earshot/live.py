@@ -58,7 +58,10 @@ class LiveController:
         self.alert_title = ""
         self.state = "LISTENING"
 
-        # conversation mode (explicit languages, turn-based)
+        # app mode: ambient (default) | captions | translate
+        self.app_mode = "ambient"
+        self.read_lang = "en"   # language the user reads (captions/ambient)
+        # conversation mode (explicit languages, turn-based) — used by TRANSLATE
         self.conv = dict(config.CONV_DEFAULT)
         self.muted = False
 

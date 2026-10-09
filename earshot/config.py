@@ -66,6 +66,11 @@ ALERT_KEYWORDS = [
     # Tagalog
     "pagsusulit", "deadline", "bukas",
 ]
+# Public-announcement cues (AMBIENT mode watches for these too).
+ANNOUNCEMENT_KEYWORDS = [
+    "attention", "boarding", "next station", "last call", "final call",
+    "gate", "platform", "now boarding", "all aboard",
+]
 ALERT_FUZZY_THRESHOLD = 88     # rapidfuzz partial_ratio
 ALERT_COOLDOWN_S = 20          # per-keyword cooldown
 ALERT_LLM_MODEL = LLM_DEFAULT  # qwen2.5:1.5b intent check

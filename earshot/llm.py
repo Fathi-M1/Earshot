@@ -9,10 +9,25 @@ stream:false, format=<schema>, temperature 0, seed 7, num_thread 2, keep_alive
 from __future__ import annotations
 
 import json
+import re
 
 from . import config, localclient
 
 OLLAMA = "http://127.0.0.1:11434"
+
+# Code-point ranges that are NEVER valid in our target scripts (CJK, Hangul,
+# Hiragana/Katakana, Cyrillic, Devanagari). If a translation contains these it
+# hallucinated a foreign script — we strip them and, if too little survives,
+# reject the translation (caller falls back to the original).
+_FOREIGN = re.compile(
+    "[぀-ヿ㐀-䶿一-鿿가-힯Ѐ-ӿऀ-ॿ]"
+)
+
+
+def _sanitize(text: str, target_lang: str) -> str:
+    cleaned = _FOREIGN.sub("", text)
+    # collapse whitespace left by removals
+    return re.sub(r"\s{2,}", " ", cleaned).strip()
 
 
 def chat_json(model: str, system: str, user: str, schema: dict, timeout: float = 8.0) -> dict | None:
@@ -68,5 +83,9 @@ def translate(text: str, target_lang: str, model: str = config.LLM_HEAVY, timeou
     out = chat_json(model, system, text, _TRANSLATION_SCHEMA, timeout=timeout)
     if not out:
         return None
-    t = str(out.get("translation", "")).strip()
-    return t or None
+    raw = str(out.get("translation", "")).strip()
+    t = _sanitize(raw, target_lang)
+    # If sanitizing removed most of the output, the model drifted scripts — reject.
+    if not t or len(t) < 0.5 * len(raw):
+        return None
+    return t

@@ -25,9 +25,22 @@ class PublicHostRefused(RuntimeError):
 
 @dataclass
 class Counters:
-    bytes_sent: int = 0
-    bytes_recv: int = 0
+    # internet_* = bytes to NON-private destinations (0 by construction: we refuse
+    # public hosts before any socket opens). local_* = loopback/private (Ollama).
+    internet_sent: int = 0
+    internet_recv: int = 0
+    local_sent: int = 0
+    local_recv: int = 0
     requests: int = 0
+
+    # Back-compat alias: the privacy panel's "bytes to the internet".
+    @property
+    def bytes_sent(self) -> int:
+        return self.internet_sent
+
+    @property
+    def bytes_recv(self) -> int:
+        return self.internet_recv
 
 
 _counters = Counters()
@@ -36,13 +49,16 @@ _lock = threading.Lock()
 
 def counters() -> Counters:
     with _lock:
-        return Counters(_counters.bytes_sent, _counters.bytes_recv, _counters.requests)
+        return Counters(
+            _counters.internet_sent, _counters.internet_recv,
+            _counters.local_sent, _counters.local_recv, _counters.requests,
+        )
 
 
 def reset_counters() -> None:
     with _lock:
-        _counters.bytes_sent = 0
-        _counters.bytes_recv = 0
+        _counters.internet_sent = _counters.internet_recv = 0
+        _counters.local_sent = _counters.local_recv = 0
         _counters.requests = 0
 
 
@@ -90,12 +106,21 @@ def _guard(url: str) -> None:
         )
 
 
-def _count(payload: bytes | None, response: httpx.Response) -> None:
+def _count(payload: bytes | None, response: httpx.Response, host: str) -> None:
+    # Every request here has already passed _guard (host is loopback/private), so
+    # it counts as LOCAL. internet_* only moves if a public host ever slipped
+    # through (it can't) — which is exactly the guarantee the panel shows.
+    is_local = is_local_host(host)
     with _lock:
         _counters.requests += 1
-        if payload is not None:
-            _counters.bytes_sent += len(payload)
-        _counters.bytes_recv += len(response.content)
+        sent = len(payload) if payload is not None else 0
+        recv = len(response.content)
+        if is_local:
+            _counters.local_sent += sent
+            _counters.local_recv += recv
+        else:
+            _counters.internet_sent += sent
+            _counters.internet_recv += recv
 
 
 def post_json(url: str, json_body: dict, timeout: float = 12.0) -> httpx.Response:
@@ -104,16 +129,18 @@ def post_json(url: str, json_body: dict, timeout: float = 12.0) -> httpx.Respons
     import json as _json
 
     payload = _json.dumps(json_body).encode("utf-8")
+    host = urlparse(url).hostname or ""
     with httpx.Client(timeout=timeout) as client:
         resp = client.post(url, content=payload, headers={"content-type": "application/json"})
-    _count(payload, resp)
+    _count(payload, resp, host)
     return resp
 
 
 def get(url: str, timeout: float = 5.0) -> httpx.Response:
     """GET a guaranteed-local URL, counting bytes. Guards first."""
     _guard(url)
+    host = urlparse(url).hostname or ""
     with httpx.Client(timeout=timeout) as client:
         resp = client.get(url)
-    _count(None, resp)
+    _count(None, resp, host)
     return resp

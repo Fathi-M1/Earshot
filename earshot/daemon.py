@@ -91,6 +91,7 @@ class Hub:
     """Holds the latest track payload and fans it out to all websocket clients."""
 
     token: str = field(default_factory=_load_or_create_token)
+    latest_proof: dict = field(default_factory=dict)
     _clients: set[WebSocket] = field(default_factory=set)
     _latest: dict = field(default_factory=dict)
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
@@ -292,9 +293,11 @@ def _live_page(token: str) -> str:
         </div>
       </div>
       <div class="card" style="margin-top:16px">
-        <h2>Privacy / status</h2>
-        <div class="kv"><span class="k">mode</span><span id="kMode">—</span></div>
+        <h2>Privacy / status · measured live</h2>
+        <div class="kv"><span class="k">engine</span><span id="kMode">—</span></div>
         <div class="kv"><span class="k">bytes to internet</span><span id="kBytes">—</span></div>
+        <div class="kv"><span class="k">internet connections</span><span id="kConn">—</span></div>
+        <div class="kv"><span class="k">local bytes (Ollama)</span><span id="kLocal">—</span></div>
         <div class="kv"><span class="k">internet cut</span><span id="kCut">—</span></div>
       </div>
     </div>
@@ -377,8 +380,10 @@ def _live_page(token: str) -> str:
   async function poll(){{
     try {{
       const h = await (await fetch('/health')).json();
-      document.getElementById('kMode').textContent = h.mode;
+      document.getElementById('kMode').textContent = h.mode + ' · ' + (h.app_mode||'');
       document.getElementById('kBytes').textContent = h.bytes_sent;
+      document.getElementById('kConn').textContent = h.internet_connections;
+      document.getElementById('kLocal').textContent = h.local_bytes_sent;
       document.getElementById('kCut').textContent = h.net_cut ? 'yes' : 'no';
       document.getElementById('liveBtn').classList.toggle('on', h.mode==='live');
       document.getElementById('counterBtn').classList.toggle('on', h.mode==='counter');
@@ -406,19 +411,25 @@ def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[Fa
 
     @dash.get("/health")
     async def health() -> JSONResponse:
-        c = net_counters()
-        net_cut = await run_in_threadpool(netcut.is_cut_cached)  # may spawn PowerShell
+        net_cut = await run_in_threadpool(netcut.is_cut_cached)  # cached; may spawn PowerShell
+        pr = hub.latest_proof or {}  # refreshed on a background timer (instant read)
         return JSONResponse(
             {
                 "ok": True,
                 "brand": brand.display_name(),
-                "bytes_sent": c.bytes_sent,
-                "bytes_recv": c.bytes_recv,
+                "bytes_sent": pr.get("internet_bytes_sent", 0),   # to the internet (0)
+                "local_bytes_sent": pr.get("local_bytes_sent", 0),  # loopback (Ollama)
+                "internet_connections": pr.get("internet_connections", 0),
                 "phone_token": hub.token,
                 "mode": controller.mode,
+                "app_mode": controller.app_mode,
                 "net_cut": net_cut,
             }
         )
+
+    @dash.get("/proof")
+    async def proof_endpoint() -> JSONResponse:
+        return JSONResponse(hub.latest_proof or {})
 
     @dash.post("/mode")
     async def set_mode(request: Request) -> JSONResponse:
@@ -595,6 +606,18 @@ async def _tick_loop(hub: Hub, controller: LiveController) -> None:
         await asyncio.sleep(TICK_SECONDS)
 
 
+async def _proof_refresher(hub: Hub) -> None:
+    """Refresh the privacy proof (psutil is slow) off the request path."""
+    from . import privacy
+
+    while True:
+        try:
+            hub.latest_proof = await run_in_threadpool(privacy.proof)
+        except Exception:
+            pass
+        await asyncio.sleep(5.0)
+
+
 async def _serve_async(hub: Hub, controller: LiveController, *, tick: bool, start_live: bool) -> None:
     import uvicorn
 
@@ -610,6 +633,7 @@ async def _serve_async(hub: Hub, controller: LiveController, *, tick: bool, star
     if tick:
         coros.append(_tick_loop(hub, controller))
     coros.append(controller.watch_pacer())  # drives the watch in live mode
+    coros.append(_proof_refresher(hub))      # privacy counters off the request path
     await asyncio.gather(*coros)
 
 
