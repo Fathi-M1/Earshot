@@ -65,11 +65,32 @@ STATE_TILE_FILES = {
 }
 
 
+TOKEN_FILE = REPO_ROOT / "phone.token"
+
+
+def _load_or_create_token() -> str:
+    """Stable phone token across daemon restarts, so an installed PWA / open tab
+    keeps working. Stored in a git-ignored file."""
+    try:
+        if TOKEN_FILE.exists():
+            existing = TOKEN_FILE.read_text(encoding="utf-8").strip()
+            if existing:
+                return existing
+    except Exception:
+        pass
+    token = secrets.token_urlsafe(8)
+    try:
+        TOKEN_FILE.write_text(token, encoding="utf-8")
+    except Exception:
+        pass
+    return token
+
+
 @dataclass
 class Hub:
     """Holds the latest track payload and fans it out to all websocket clients."""
 
-    token: str = field(default_factory=lambda: secrets.token_urlsafe(8))
+    token: str = field(default_factory=_load_or_create_token)
     _clients: set[WebSocket] = field(default_factory=set)
     _latest: dict = field(default_factory=dict)
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
