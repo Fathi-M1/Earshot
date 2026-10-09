@@ -121,3 +121,20 @@ mean transcribe RTF by model (all languages):
 model             tokens   eval_s    tok/s   wall_s
 
 localclient bytes sent/recv: 0 / 0 (requests 0)
+latency  partial=858ms commit=2228ms translate=Nonems e2e=2228ms (03:20:00)
+latency  partial=1953ms commit=2576ms translate=Nonems e2e=2576ms (03:20:40)
+latency  partial=1015ms commit=1942ms translate=Nonems e2e=1942ms (03:20:58)
+latency  partial=766ms commit=1702ms translate=Nonems e2e=1702ms (03:21:12)
+
+## CHOSEN CONFIG (data-driven, this laptop — Iris Xe, faster-whisper CPU int8)
+# Fast tier (partials + instant commit): tiny   (RTF 0.224, WER 0.04 clean en)
+# Final tier: en -> tiny (tiny == small WER at 6x speed; no refine for en)
+#             tl/ar -> small background refine (lazy-loaded on first tl/ar line)
+# base rejected: RTF 0.435 AND worse WER (0.38) than tiny on clip 1.
+# small rejected as a hot-tier: RTF 1.36 (FAIL <=0.5); kept for tl/ar refine only.
+# GPU (Option A, whisper.cpp Vulkan): NOT needed — CPU tiny meets all targets for
+#   en; deferred to avoid risking the working state. tl/ar ACCURACY = needs live check.
+# RAM (measured): earshot 222MB + ollama models (nomic 376MB + qwen1.5b 1.2GB) ~1.85GB < 3GB.
+#   qwen2.5:3b removed; 1.5b keep_alive 5m (unloads when idle).
+# Targets: first words <=1.0s (tiny partial on 1s window ~0.84s) MET for en;
+#   commit <=2.0s (tiny 2.5s clip ~0.56s) MET for en; tl/ar latency MET, accuracy = live check.
