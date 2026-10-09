@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>remote</title>
+<style>
+  :root{
+    --forest:#1F3A24; --forest-deep:#12241A; --moss:#3D5A40; --sage:#A9B89C;
+    --beige:#DDE3D3; --paper:#EEF1E8; --glow:#7FB3D5; --needs:#C9A45C;
+    color-scheme: dark;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body{
+    margin:0; background:var(--forest-deep); color:var(--beige);
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+    min-height:100vh; min-height:100dvh;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  .screen{ display:none; flex-direction:column; align-items:center; justify-content:center;
+           min-height:100vh; min-height:100dvh; gap:18px; padding:28px; text-align:center; }
+  .screen.on{ display:flex; }
+  .mark{ width:56px; height:56px; border-radius:16px; background:var(--forest);
+         display:flex; align-items:center; justify-content:center; }
+  .mark .dot{ width:16px; height:16px; border-radius:50%; background:var(--glow);
+              box-shadow:0 0 18px 4px rgba(127,179,213,.6); }
+  h1{ font-size:28px; font-weight:600; letter-spacing:-0.02em; margin:0; }
+  .muted{ color:var(--sage); font-size:15px; line-height:1.4; max-width:320px; }
+  button.start{ margin-top:8px; height:56px; padding:0 28px; border-radius:14px; border:0;
+                background:var(--beige); color:var(--forest-deep); font-size:17px; font-weight:600; }
+  /* main */
+  #main{ justify-content:flex-start; gap:14px; padding-top:28px; }
+  .topbar{ width:100%; display:flex; align-items:center; gap:8px; font:400 11px/1.3 ui-monospace,monospace;
+           letter-spacing:0.1em; text-transform:uppercase; color:var(--sage); }
+  .cdot{ width:7px; height:7px; border-radius:50%; background:var(--needs); }
+  .cdot.live{ background:#8FA876; }
+  .art{ width:min(100vw - 40px, 360px); aspect-ratio:1/1; border-radius:14px; background:var(--forest);
+        object-fit:cover; }
+  .overline{ font:400 11px/1.3 ui-monospace,monospace; letter-spacing:0.1em; text-transform:uppercase;
+             color:var(--sage); width:100%; }
+  .cur{ font-size:22px; font-weight:600; line-height:1.2; min-height:2.4em; width:100%; }
+  .prev{ font-size:15px; color:var(--sage); width:100%; min-height:1.2em; }
+  .n{ font:600 64px/1 ui-monospace,monospace; font-variant-numeric:tabular-nums; color:var(--beige); }
+  /* resume overlay */
+  #resume{ position:fixed; inset:0; background:rgba(18,36,26,.92); display:none;
+           align-items:center; justify-content:center; flex-direction:column; gap:12px; }
+  #resume.on{ display:flex; }
+  #resume button{ height:56px; padding:0 28px; border-radius:14px; border:0;
+                  background:var(--beige); color:var(--forest-deep); font-size:17px; font-weight:600; }
+</style>
+</head>
+<body>
+  <!-- Start screen -->
+  <div id="start" class="screen on">
+    <div class="mark"><div class="dot"></div></div>
+    <h1><span id="brand-start">…</span> remote</h1>
+    <p class="muted">Keep this tab open in Safari. Don't add to Home Screen.</p>
+    <button class="start" id="startBtn">Start</button>
+  </div>
+
+  <!-- Main screen -->
+  <div id="main" class="screen">
+    <div class="topbar"><span class="cdot" id="cdot"></span><span id="conn">connecting…</span></div>
+    <img class="art" id="art" alt="">
+    <div class="overline"><span id="state">—</span> · <span id="time">--:--</span></div>
+    <div class="n" id="n">—</div>
+    <div class="cur" id="cur"></div>
+    <div class="prev" id="prev"></div>
+  </div>
+
+  <div id="resume"><p class="muted">Audio session stopped.</p><button id="resumeBtn">Tap to resume</button></div>
+
+<script>
+(function(){
+  "use strict";
+  var qs = new URLSearchParams(location.search);
+  var token = qs.get("t") || "";
+  var brand = "earshot", display = "Earshot";
+  var audio = null, ws = null, backoff = 500, lastState = "LISTENING";
+
+  // Brand name is a variable — fetch it, never hard-code.
+  fetch("/config").then(function(r){return r.json();}).then(function(c){
+    brand = c.brand; display = c.displayName;
+    document.getElementById("brand-start").textContent = display;
+    document.title = display + " remote";
+  }).catch(function(){ document.getElementById("brand-start").textContent = "…"; });
+
+  function show(id){
+    document.getElementById("start").classList.toggle("on", id==="start");
+    document.getElementById("main").classList.toggle("on", id==="main");
+  }
+
+  function artUrl(state){ return "/art/" + encodeURIComponent(state) + ".png"; }
+
+  function setMetadata(m){
+    if (!("mediaSession" in navigator)) return;
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: m.title || "",
+        artist: m.artist || "",
+        album: m.album || display,
+        artwork: [{ src: artUrl(m.state || lastState), sizes: "512x512", type: "image/png" }]
+      });
+      navigator.mediaSession.playbackState = (m.state === "MUTED") ? "paused" : "playing";
+    } catch (e) {}
+  }
+
+  function applyTrack(m){
+    lastState = m.state || lastState;
+    document.getElementById("state").textContent = m.state || "";
+    document.getElementById("cur").textContent = m.title || "";
+    document.getElementById("prev").textContent = m.artist || "";
+    document.getElementById("n").textContent = (m.n !== null && m.n !== undefined) ? m.n : "";
+    document.getElementById("time").textContent = new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+    var art = document.getElementById("art");
+    var next = artUrl(lastState);
+    if (art.getAttribute("data-state") !== lastState){ art.src = next; art.setAttribute("data-state", lastState); }
+    setMetadata(m);
+  }
+
+  function setConn(live){
+    document.getElementById("cdot").classList.toggle("live", live);
+    document.getElementById("conn").textContent = live ? "live" : "reconnecting…";
+  }
+
+  function connect(){
+    if (ws && (ws.readyState === 0 || ws.readyState === 1)) return; // one in flight
+    var proto = location.protocol === "https:" ? "wss" : "ws";
+    ws = new WebSocket(proto + "://" + location.host + "/ws/phone?t=" + encodeURIComponent(token));
+    ws.onopen = function(){ setConn(true); backoff = 500; };
+    ws.onmessage = function(e){ try { applyTrack(JSON.parse(e.data)); } catch(_){} };
+    ws.onclose = function(){ setConn(false); setTimeout(connect, backoff); backoff = Math.min(backoff*2, 8000); };
+    ws.onerror = function(){ try { ws.close(); } catch(_){} };
+  }
+
+  function startAudio(){
+    // Finite silent file, loop=true, never change src (keeps the iOS Media Session alive).
+    audio = new Audio("/silent.wav");
+    audio.loop = true;
+    try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch(_){}
+    var p = audio.play();
+    if (p && p.catch) p.catch(function(){ showResume(); });
+    audio.onpause = function(){ showResume(); };
+  }
+
+  function showResume(){ document.getElementById("resume").classList.add("on"); }
+  function hideResume(){ document.getElementById("resume").classList.remove("on"); }
+
+  function wireMediaSession(){
+    if (!("mediaSession" in navigator)) return;
+    // Only play/pause/next/previous — NO seek handlers (they would replace next/prev).
+    navigator.mediaSession.setActionHandler("play", function(){ sendButton("play"); });
+    navigator.mediaSession.setActionHandler("pause", function(){ sendButton("pause"); });
+    navigator.mediaSession.setActionHandler("nexttrack", function(){ sendButton("next"); });
+    navigator.mediaSession.setActionHandler("previoustrack", function(){ sendButton("previous"); });
+  }
+
+  function sendButton(action){
+    // P0: button routing lands in P3. Log to console so we can confirm which
+    // events the Garmin actually sends during the P0 button-map test.
+    console.log("[button]", action, Date.now());
+    if (ws && ws.readyState === 1) {
+      try { ws.send(JSON.stringify({ type:"button", action:action, source:"iphone", ts: Date.now() })); } catch(_){}
+    }
+  }
+
+  document.getElementById("startBtn").addEventListener("click", function(){
+    startAudio();
+    wireMediaSession();
+    show("main");
+    connect();
+  });
+  document.getElementById("resumeBtn").addEventListener("click", function(){
+    if (audio){ var p = audio.play(); if (p && p.catch) p.catch(function(){}); }
+    hideResume();
+  });
+
+  document.addEventListener("visibilitychange", function(){
+    if (document.visibilityState === "visible"){
+      // Resync: reconnect if needed, nudge audio back.
+      if (audio && audio.paused){ var p = audio.play(); if (p && p.catch) p.catch(showResume); }
+      if (!ws || ws.readyState > 1) connect();
+    }
+  });
+})();
+</script>
+</body>
+</html>

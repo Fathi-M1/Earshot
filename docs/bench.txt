@@ -1,0 +1,23 @@
+# Earshot — measured numbers only. Blank = not measured. Never put a number here
+# that wasn't produced on this laptop by `earshot bench` or a real stopwatch/video.
+# `earshot bench` APPENDS its own timestamped blocks below.
+
+## Phase 0 manual measurements (fill from real video/stopwatch — 03 Phase 0, 07)
+Garmin FR165 refresh (title changes every 2 s; 60 fps video; 20 samples):
+    p50 = ____ s   p90 = ____ s
+    decision: <=3 s -> live captions on watch | 3-8 s -> alerts/catch-up only | >8 s -> buttons+alerts only
+iPhone lock screen refresh:  p50 = ____ s   p90 = ____ s
+Windows lock screen (SMTC):  ____ s   (deferred to P1; Garmin is the gate)
+
+Garmin button-map test (press each; note which events arrive + duplicates):
+    play/pause toggle -> ________    next -> ________    previous -> ________
+    chosen map (01 §5): ____________________________________________
+
+Hotspot + firewall cut (scripts\cut-internet.ps1 from admin PowerShell):
+    Test-NetConnection 1.1.1.1 -Port 443 -> TcpTestSucceeded: ______ (expect False)
+    phone page still loads at 172.20.10.x:7778 -> ______
+    Get-NetFirewallProfile all Enabled -> ______
+
+## ASR / Ollama (auto-appended by `earshot bench` once you record tests/audio/*.wav)
+# Fathi's earlier cold/no-VAD spike: base took 13.4 s for 10 s audio (RTF 1.34).
+# Bench pick = biggest model with mean RTF <= 0.5 (warm, VAD on, cpu_threads=4).

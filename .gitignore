@@ -1,0 +1,35 @@
+# Earshot — never commit models, databases, secrets, caches
+models/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.env
+.env.*
+*.token
+
+# Raw audio must never be committed (also never written by the product; only explicit bench WAVs under tests/audio/ are allowed)
+*.wav
+*.pcm
+*.mp3
+*.flac
+*.m4a
+!tests/audio/*.wav
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Node / dashboard
+node_modules/
+web/dashboard/dist/
+
+# OS
+Thumbs.db
+desktop.ini
