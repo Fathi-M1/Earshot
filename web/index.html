@@ -11,27 +11,22 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>remote</title>
 <style>
-  @font-face{
-    font-family:"Host Grotesk"; src:url("/font/host-grotesk.ttf") format("truetype");
-    font-weight:400 700; font-display:swap;
-  }
-  :root{
-    --forest:#1F3A24; --fd:#12241A; --moss:#3D5A40; --sage:#A9B89C;
-    --beige:#DDE3D3; --paper:#EEF1E8; --glow:#7FB3D5; --needs:#C9A45C;
-    color-scheme:dark;
-  }
+  @font-face{ font-family:"Host Grotesk"; src:url("/font/host-grotesk.ttf") format("truetype");
+    font-weight:400 700; font-display:swap; }
+  :root{ --forest:#1F3A24; --fd:#12241A; --moss:#3D5A40; --sage:#A9B89C; --beige:#DDE3D3;
+    --paper:#EEF1E8; --glow:#7FB3D5; --needs:#C9A45C; --fern:#8FA876; color-scheme:dark; }
   *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html,body{ margin:0; height:100%; }
-  body{
-    background:var(--fd); color:var(--beige);
+  body{ background:var(--fd); color:var(--beige);
     font-family:"Host Grotesk", ui-sans-serif, system-ui, -apple-system, sans-serif;
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-    overflow:hidden;
-  }
+    overflow:hidden; }
+  [dir="rtl"], [lang="ar"]{ direction:rtl; text-align:right;
+    font-family:"Host Grotesk","Geeza Pro","Noto Naskh Arabic","Al Bayan", system-ui, sans-serif; }
   .screen{ display:none; flex-direction:column; height:100vh; height:100dvh; }
   .screen.on{ display:flex; }
   /* start */
-  #start{ align-items:center; justify-content:center; gap:18px; padding:28px; text-align:center; }
+  #start{ align-items:center; justify-content:center; gap:18px; padding:28px; text-align:center;
+          padding-top:calc(28px + env(safe-area-inset-top)); }
   .mark{ width:56px; height:56px; border-radius:16px; background:var(--forest);
          display:flex; align-items:center; justify-content:center; }
   .mark .dot{ width:16px; height:16px; border-radius:50%; background:var(--glow);
@@ -41,22 +36,45 @@
   button.start{ margin-top:8px; height:56px; padding:0 30px; border-radius:14px; border:0;
                 background:var(--beige); color:var(--fd); font-size:17px; font-weight:600; }
   /* main */
-  #main{ padding:14px 18px; }
-  .top{ display:flex; align-items:center; gap:8px; font:400 11px/1 ui-monospace,monospace;
-        letter-spacing:.1em; text-transform:uppercase; color:var(--sage); flex:0 0 auto; }
+  #main{ padding:0; }
+  .top{ flex:0 0 auto; display:flex; align-items:center; gap:8px;
+    padding:calc(10px + env(safe-area-inset-top)) 16px 10px;
+    font:400 11px/1 ui-monospace,monospace; letter-spacing:.1em; text-transform:uppercase; color:var(--sage); }
   .cdot{ width:8px; height:8px; border-radius:50%; background:var(--needs); }
-  .cdot.live{ background:#8FA876; }
-  .lang{ margin-left:auto; border:1px solid var(--sage); border-radius:6px; padding:3px 7px; }
-  .diag{ margin-left:8px; color:var(--moss); }
-  #stack{ flex:1 1 auto; display:flex; flex-direction:column; justify-content:flex-end;
-          gap:14px; overflow:hidden; padding:14px 0; }
-  .line{ }
-  .line .orig{ font-size:clamp(30px,7.2vw,40px); line-height:1.12; font-weight:400; color:var(--sage); }
-  .line.newest .orig{ font-weight:700; color:var(--beige); }
-  .line .eng{ font-size:clamp(15px,3.6vw,19px); line-height:1.25; color:var(--sage); margin-top:4px; }
-  .line.alert .orig{ color:var(--needs); }
-  #partial{ font-size:clamp(22px,5vw,28px); color:var(--moss); font-style:italic;
-            min-height:1.4em; flex:0 0 auto; }
+  .cdot.live{ background:var(--fern); }
+  .top .lang{ margin-left:auto; border:1px solid var(--sage); border-radius:6px; padding:3px 7px; }
+  .top .diag{ margin-left:8px; color:var(--moss); }
+  #scroll{ flex:1 1 auto; overflow-y:auto; -webkit-overflow-scrolling:touch;
+           display:flex; flex-direction:column; padding:0 16px; position:relative; }
+  #stack{ margin-top:auto; display:flex; flex-direction:column; gap:16px; padding:14px 0; }
+  .line{ display:flex; flex-direction:column; gap:3px; }
+  .line .who{ font:400 11px/1 ui-monospace,monospace; letter-spacing:.1em; text-transform:uppercase; color:var(--sage); }
+  .line.them .who{ color:var(--glow); } .line.me .who{ color:var(--fern); }
+  .line.alert .who{ color:var(--needs); }
+  .line .primary{ font-size:clamp(28px,6.6vw,38px); line-height:1.14; font-weight:700; color:var(--beige); }
+  .line.alert .primary{ color:var(--needs); }
+  .line .secondary{ font-size:clamp(14px,3.4vw,18px); line-height:1.25; color:var(--sage); }
+  #partial{ flex:0 0 auto; padding:0 16px 6px; font-size:clamp(18px,4.4vw,24px);
+            color:var(--moss); font-style:italic; min-height:1.3em; }
+  #jump{ position:fixed; left:50%; transform:translateX(-50%); bottom:170px; display:none;
+         background:var(--beige); color:var(--fd); border:0; border-radius:980px; padding:8px 16px;
+         font-size:13px; font-weight:600; box-shadow:0 6px 18px rgba(0,0,0,.3); }
+  #jump.on{ display:block; }
+  /* controls */
+  .controls{ flex:0 0 auto; border-top:1px solid rgba(169,184,156,.2);
+    padding:10px 14px calc(10px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; gap:9px; }
+  .picker{ display:flex; align-items:center; gap:6px; font:400 11px/1 ui-monospace,monospace;
+    text-transform:uppercase; letter-spacing:.06em; color:var(--sage); flex-wrap:wrap; }
+  .chip{ border:1px solid rgba(169,184,156,.4); border-radius:8px; padding:6px 9px; font-size:13px;
+    color:var(--beige); background:transparent; }
+  .chip.on{ background:var(--moss); border-color:var(--moss); color:var(--beige); }
+  .row2{ display:flex; gap:9px; }
+  .turn{ flex:1; height:52px; border-radius:12px; border:1px solid rgba(169,184,156,.4);
+    background:transparent; color:var(--beige); font-size:16px; font-weight:600; }
+  .turn.on{ background:var(--beige); color:var(--fd); border-color:var(--beige); }
+  .act{ height:52px; border-radius:12px; border:1px solid rgba(169,184,156,.4); background:transparent;
+    color:var(--beige); font-size:14px; font-weight:600; padding:0 14px; }
+  .act.mute.on{ background:var(--moss); }
   /* resume */
   #resume{ position:fixed; inset:0; background:rgba(18,36,26,.94); display:none;
            align-items:center; justify-content:center; flex-direction:column; gap:12px; }
@@ -76,11 +94,33 @@
   <div id="main" class="screen">
     <div class="top">
       <span class="cdot" id="cdot"></span><span id="conn">connecting…</span>
-      <span class="lang" id="lang">—</span>
-      <span class="diag" id="diag"></span>
+      <span class="lang" id="lang">—</span><span class="diag" id="diag"></span>
     </div>
-    <div id="stack"></div>
+    <div id="scroll"><div id="stack"></div></div>
+    <button id="jump">Jump to live ↓</button>
     <div id="partial"></div>
+    <div class="controls">
+      <div class="picker">They speak:
+        <button class="chip" data-their="ar">Arabic</button>
+        <button class="chip" data-their="tl">Tagalog</button>
+        <button class="chip" data-their="es">Spanish</button>
+        <button class="chip" data-their="en">English</button>
+      </div>
+      <div class="picker">I speak:
+        <button class="chip" data-mine="en">English</button>
+        <button class="chip" data-mine="tl">Tagalog</button>
+        <button class="chip" data-mine="es">Spanish</button>
+        <button class="chip" data-mine="ar">Arabic</button>
+      </div>
+      <div class="row2">
+        <button class="turn" id="turnThem" data-turn="them">Them</button>
+        <button class="turn" id="turnMe" data-turn="me">Me</button>
+      </div>
+      <div class="row2">
+        <button class="act" id="catchBtn">Catch me up</button>
+        <button class="act mute" id="muteBtn">Mute</button>
+      </div>
+    </div>
   </div>
 
   <div id="resume"><p class="muted">Audio session stopped.</p><button id="resumeBtn">Tap to resume</button></div>
@@ -91,14 +131,12 @@
   var qs = new URLSearchParams(location.search);
   var token = qs.get("t") || "";
   var display = "Earshot";
-  var audio=null, ws=null, backoff=500, lastState="LISTENING", wakeLock=null;
-  var lines=[]; // committed {orig, eng, lang, alert}
+  var audio=null, ws=null, backoff=500, lastState="LISTENING", wakeLock=null, stick=true, muted=false;
+  var conv = {their:"ar", mine:"en", turn:"them"};
+  var lines=[];
 
-  // Fetch the token from the server so it ALWAYS matches phone.token, even when
-  // an installed PWA launch drops the ?t= query (manifest start_url=".").
   var cfgReady = fetch("/config").then(function(r){return r.json();}).then(function(c){
-    display = c.displayName;
-    if (c.token) token = c.token;
+    display = c.displayName; if (c.token) token = c.token;
     document.getElementById("brand-start").textContent = display;
     document.title = display + " remote";
   }).catch(function(){ document.getElementById("brand-start").textContent="…"; });
@@ -109,131 +147,136 @@
   }
   function artUrl(state){ return "/art/"+encodeURIComponent(state)+".png"; }
 
-  // ---- full-screen captions (foreground) ----
+  // ---- caption stack (scrollable, newest at bottom) ----
+  var scroll = document.getElementById("scroll");
+  var stackEl = document.getElementById("stack");
+  function nearBottom(){ return scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 60; }
+  scroll.addEventListener("scroll", function(){
+    stick = nearBottom();
+    document.getElementById("jump").classList.toggle("on", !stick);
+  });
+  function scrollToLive(){ scroll.scrollTop = scroll.scrollHeight; stick = true;
+    document.getElementById("jump").classList.remove("on"); }
+  document.getElementById("jump").onclick = scrollToLive;
+
   function renderStack(){
-    var el = document.getElementById("stack");
-    el.innerHTML = "";
-    var show = lines.slice(-3);
-    show.forEach(function(ln, i){
-      var newest = (i === show.length-1);
+    stackEl.innerHTML = "";
+    lines.slice(-40).forEach(function(ln){
       var div = document.createElement("div");
-      div.className = "line" + (newest?" newest":"") + (ln.alert?" alert":"");
-      var eng = (ln.eng && ln.eng !== ln.orig) ? '<div class="eng">→ '+ln.eng+'</div>' : '';
-      div.innerHTML = '<div class="orig">'+ln.orig+'</div>'+eng;
-      el.appendChild(div);
+      div.className = "line " + (ln.speaker||"them") + (ln.alert?" alert":"");
+      var p = ln.primary||{}, s = ln.secondary||{};
+      var who = (ln.speaker==="me"?"You":"Them") + (ln.alert?" · ⬥ alert":"");
+      var pr = '<div class="primary"'+(p.rtl?' dir="rtl" lang="'+(p.lang||'')+'"':'')+'>'+(p.text||"")+'</div>';
+      var se = s.text ? '<div class="secondary"'+(s.rtl?' dir="rtl" lang="'+(s.lang||'')+'"':'')+'>'+s.text+'</div>' : '';
+      div.innerHTML = '<div class="who">'+who+'</div>'+pr+se;
+      stackEl.appendChild(div);
     });
-    document.getElementById("lang").textContent = show.length ? (show[show.length-1].lang||"—") : "—";
+    if (stick) scrollToLive();
   }
 
-  // ---- Media Session (lock screen / Garmin) from "track" events ----
+  // ---- Media Session (lock screen / Garmin) ----
   function setMetadata(m){
     if (!("mediaSession" in navigator)) return;
     try {
       navigator.mediaSession.metadata = new MediaMetadata({
-        title: m.title||"", artist: m.artist||"", album: m.album||display,
-        artwork: [{ src: artUrl(m.state||lastState), sizes:"512x512", type:"image/png" }]
-      });
+        title:m.title||"", artist:m.artist||"", album:m.album||display,
+        artwork:[{ src:artUrl(m.state||lastState), sizes:"512x512", type:"image/png" }] });
       navigator.mediaSession.playbackState = (m.state==="MUTED") ? "paused" : "playing";
     } catch(e){}
   }
 
   function onMsg(m){
-    if (m.type === "auth" && m.ok === false){
-      document.getElementById("partial").textContent =
-        "⚠ " + (m.reason||"auth failed") + " (got " + (m.got||"∅") + ", want " + (m.want||"?") + ")";
-      return;
+    if (m.type==="auth" && m.ok===false){
+      document.getElementById("partial").textContent = "⚠ "+(m.reason||"auth failed"); return;
     }
-    if (m.type === "track"){
-      lastState = m.state || lastState;
-      setMetadata(m);
-    } else if (m.type === "caption"){
-      if (!m.committed){
-        document.getElementById("partial").textContent =
-          (m.lang? "["+m.lang+"] ":"") + "… " + (m.original||"");
-        return;
-      }
+    if (m.type==="track"){ lastState=m.state||lastState; muted=(m.state==="MUTED"); setMetadata(m);
+      document.getElementById("muteBtn").classList.toggle("on", muted);
+      document.getElementById("muteBtn").textContent = muted ? "Muted" : "Mute"; return; }
+    if (m.type==="conv"){ conv={their:m.their,mine:m.mine,turn:m.turn}; syncControls(); return; }
+    if (m.type==="caption"){
+      if (!m.committed){ document.getElementById("partial").textContent =
+        (m.lang?"["+m.lang+"] ":"")+"… "+(m.original||""); return; }
       document.getElementById("partial").textContent = "";
-      lines.push({ orig:m.original, eng:m.english, lang:m.lang,
-                   alert:(m.matched && m.matched.length>0) });
-      if (lines.length > 20) lines = lines.slice(-20);
-      renderStack();
+      lines.push(m); if (lines.length>60) lines=lines.slice(-60);
+      document.getElementById("lang").textContent = (m.lang||"—");
+      renderStack(); return;
     }
+    // events (alert/catchup/mute/ready) could surface here if desired
   }
 
   function setConn(live, detail){
     document.getElementById("cdot").classList.toggle("live", live);
-    document.getElementById("conn").textContent = live ? "live" : ("reconnecting… " + (detail||""));
+    document.getElementById("conn").textContent = live ? "live" : ("reconnecting… "+(detail||""));
   }
   function connect(){
-    if (ws && (ws.readyState===0 || ws.readyState===1)) return;
+    if (ws && (ws.readyState===0||ws.readyState===1)) return;
     var proto = location.protocol==="https:" ? "wss":"ws";
     var url = proto+"://"+location.host+"/ws/phone?t="+encodeURIComponent(token);
     console.log("[ws] connecting", url);
     ws = new WebSocket(url);
-    ws.onopen = function(){ setConn(true); backoff=500; };
+    ws.onopen = function(){ setConn(true); backoff=500; fetchConv(); };
     ws.onmessage = function(e){ try{ onMsg(JSON.parse(e.data)); }catch(_){} };
-    ws.onclose = function(e){
-      var why = "code " + e.code + (e.reason ? " · " + e.reason : "");
-      console.log("[ws] closed", e.code, e.reason);
-      setConn(false, why);
-      setTimeout(connect, backoff); backoff=Math.min(backoff*2,8000);
-    };
+    ws.onclose = function(e){ setConn(false, "code "+e.code+(e.reason?" · "+e.reason:""));
+      setTimeout(connect, backoff); backoff=Math.min(backoff*2,8000); };
     ws.onerror = function(){ try{ ws.close(); }catch(_){} };
   }
 
   function startAudio(){
-    audio = new Audio("/silent.wav");
-    audio.loop = true;
-    try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch(_){}
-    var p = audio.play();
-    if (p && p.catch) p.catch(function(){ showResume(); });
-    audio.onpause = function(){ showResume(); };
+    audio = new Audio("/silent.wav"); audio.loop=true;
+    try { if (navigator.audioSession) navigator.audioSession.type="playback"; } catch(_){}
+    var p = audio.play(); if (p && p.catch) p.catch(showResume);
+    audio.onpause = showResume;
   }
   function showResume(){ document.getElementById("resume").classList.add("on"); }
   function hideResume(){ document.getElementById("resume").classList.remove("on"); }
 
   function wireMediaSession(){
     if (!("mediaSession" in navigator)) return;
-    navigator.mediaSession.setActionHandler("play",          function(){ sendButton("catchup"); });
-    navigator.mediaSession.setActionHandler("pause",         function(){ sendButton("mute"); });
-    navigator.mediaSession.setActionHandler("nexttrack",     function(){ sendButton("bookmark"); });
+    navigator.mediaSession.setActionHandler("play", function(){ sendButton(muted?"unmute":"catchup"); });
+    navigator.mediaSession.setActionHandler("pause", function(){ sendButton("mute"); });
+    navigator.mediaSession.setActionHandler("nexttrack", function(){ sendButton("bookmark"); });
     navigator.mediaSession.setActionHandler("previoustrack", function(){ sendButton("catchup"); });
   }
   function sendButton(action){
-    console.log("[button]", action, Date.now());
-    if (ws && ws.readyState===1){
-      try{ ws.send(JSON.stringify({type:"button", action:action, source:"iphone", ts:Date.now()})); }catch(_){}
-    }
+    console.log("[button]", action);
+    if (ws && ws.readyState===1){ try{ ws.send(JSON.stringify({type:"button",action:action,source:"iphone",ts:Date.now()})); }catch(_){} }
   }
 
-  async function requestWakeLock(){
-    try { if ("wakeLock" in navigator){ wakeLock = await navigator.wakeLock.request("screen"); } } catch(_){}
+  // ---- conversation controls ----
+  function post(path, body){ return fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body||{})}); }
+  function fetchConv(){ fetch("/conv").then(function(r){return r.json();}).then(function(c){
+    conv={their:c.their,mine:c.mine,turn:c.turn}; muted=!!c.muted; syncControls(); }).catch(function(){}); }
+  function syncControls(){
+    document.querySelectorAll("[data-their]").forEach(function(b){ b.classList.toggle("on", b.dataset.their===conv.their); });
+    document.querySelectorAll("[data-mine]").forEach(function(b){ b.classList.toggle("on", b.dataset.mine===conv.mine); });
+    document.getElementById("turnThem").classList.toggle("on", conv.turn==="them");
+    document.getElementById("turnMe").classList.toggle("on", conv.turn==="me");
+    var mb=document.getElementById("muteBtn"); mb.classList.toggle("on",muted); mb.textContent=muted?"Muted":"Mute";
   }
+  document.querySelectorAll("[data-their]").forEach(function(b){ b.onclick=function(){ post("/conv",{their:b.dataset.their}); conv.their=b.dataset.their; syncControls(); }; });
+  document.querySelectorAll("[data-mine]").forEach(function(b){ b.onclick=function(){ post("/conv",{mine:b.dataset.mine}); conv.mine=b.dataset.mine; syncControls(); }; });
+  document.getElementById("turnThem").onclick=function(){ post("/conv",{turn:"them"}); conv.turn="them"; syncControls(); };
+  document.getElementById("turnMe").onclick=function(){ post("/conv",{turn:"me"}); conv.turn="me"; syncControls(); };
+  document.getElementById("catchBtn").onclick=function(){ post("/catchup"); };
+  document.getElementById("muteBtn").onclick=function(){ post(muted?"/unmute":"/mute"); };
 
+  async function requestWakeLock(){ try{ if("wakeLock" in navigator){ wakeLock=await navigator.wakeLock.request("screen"); } }catch(_){} }
   function diag(){
-    var standalone = (window.navigator.standalone === true) ||
-                     (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
-    var hasMS = ("mediaSession" in navigator);
-    var txt = (standalone?"standalone":"tab") + " · MS:" + (hasMS?"y":"n") + " · t:" + (token||"∅").slice(0,4);
-    document.getElementById("diag").textContent = txt;
-    console.log("[diag] standalone=", standalone, "mediaSession=", hasMS, "token=", (token||"").slice(0,4));
+    var standalone=(window.navigator.standalone===true)||(window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches);
+    document.getElementById("diag").textContent=(standalone?"standalone":"tab")+" · MS:"+(("mediaSession" in navigator)?"y":"n")+" · t:"+(token||"∅").slice(0,4);
   }
 
   document.getElementById("startBtn").addEventListener("click", function(){
-    startAudio(); wireMediaSession(); requestWakeLock();
-    show("main");
-    // Connect only after /config resolves so the token matches phone.token.
+    startAudio(); wireMediaSession(); requestWakeLock(); show("main");
     cfgReady.then(function(){ diag(); connect(); }, function(){ diag(); connect(); });
   });
   document.getElementById("resumeBtn").addEventListener("click", function(){
-    if (audio){ var p=audio.play(); if(p&&p.catch)p.catch(function(){}); }
-    requestWakeLock(); hideResume();
+    if (audio){ var p=audio.play(); if(p&&p.catch)p.catch(function(){}); } requestWakeLock(); hideResume();
   });
   document.addEventListener("visibilitychange", function(){
-    if (document.visibilityState === "visible"){
+    if (document.visibilityState==="visible"){
       if (audio && audio.paused){ var p=audio.play(); if(p&&p.catch)p.catch(showResume); }
-      requestWakeLock();
-      if (!ws || ws.readyState>1) connect();
+      requestWakeLock(); if (!ws || ws.readyState>1) connect();
     }
   });
 })();

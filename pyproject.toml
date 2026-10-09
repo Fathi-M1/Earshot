@@ -15,6 +15,9 @@ dependencies = [
     "sounddevice",
     "faster-whisper",
     "psutil",
+    "rapidfuzz>=3.14.6",
+    "jellyfish>=1.2.1",
+    "pyttsx3>=2.99",
 ]
 
 [project.optional-dependencies]

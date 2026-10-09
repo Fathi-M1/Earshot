@@ -35,7 +35,7 @@ export function Problem() {
         </Reveal>
         <div className="problem-grid">
           {problems.map((item, index) => (
-            <Reveal key={item.index} delay={index * 80} className="problem-item">
+            <Reveal key={item.index} delay={index * 60} className="problem-item">
               <p className="overline">{item.index}</p>
               <h3 className="title">{item.title}</h3>
               <p className="body">{item.body}</p>

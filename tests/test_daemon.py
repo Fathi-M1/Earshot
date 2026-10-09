@@ -108,6 +108,26 @@ def test_config_exposes_token():
     assert cfg["token"] == hub.token
 
 
+def test_conv_endpoint_sets_and_gets():
+    hub = daemon.Hub()
+    controller = daemon.LiveController(hub)
+    dash, _ = daemon.build_apps(hub, controller)
+    client = TestClient(dash)
+    r = client.post("/conv", json={"their": "es", "turn": "me"})
+    assert r.json()["their"] == "es" and r.json()["turn"] == "me"
+    g = client.get("/conv").json()
+    assert g["their"] == "es" and g["turn"] == "me" and "muted" in g
+
+
+def test_mute_noop_when_not_live():
+    hub = daemon.Hub()
+    controller = daemon.LiveController(hub)
+    dash, _ = daemon.build_apps(hub, controller)
+    client = TestClient(dash)
+    # mode is counter (not live) -> mute is a no-op, stays unmuted
+    assert client.post("/mute", json={}).json()["muted"] is False
+
+
 class _FakeWS:
     def __init__(self):
         self.sent = []

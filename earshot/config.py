@@ -16,6 +16,11 @@ from __future__ import annotations
 # --- Languages (detect among these only) ---
 ASR_LANGS = ["en", "tl", "ar", "es"]
 LANG_NAMES = {"en": "English", "tl": "Tagalog", "ar": "Arabic", "es": "Spanish"}
+RTL_LANGS = {"ar", "he", "fa", "ur"}  # render right-to-left
+
+# --- Conversation mode (explicit languages, turn-based; no auto-guessing) ---
+# their = the other person's language; mine = the user's language; turn = who speaks.
+CONV_DEFAULT = {"their": "ar", "mine": "en", "turn": "them"}
 
 # --- ASR models (multilingual; NOT the .en models) ---
 ASR_MODEL = "small"          # accuracy pick; use base if small RTF > 0.5 under load
@@ -55,8 +60,23 @@ INITIAL_PROMPTS = {"en": EN_PROMPT, "tl": TAGLISH_PROMPT}
 LLM_DEFAULT = "qwen2.5:1.5b"
 LLM_HEAVY = "qwen2.5:3b"
 
-# Keyword highlight / alert (full alert logic is P2). Name + cue words.
-DEMO_KEYWORDS = ["fathi", "quiz", "deadline", "exam", "due", "submit", "monday", "lunes"]
+# --- Alerts (heard-your-name / announcements) ---
+ALERT_KEYWORDS = [
+    "Fathi", "quiz", "exam", "deadline", "Monday", "assignment",
+    # Tagalog
+    "pagsusulit", "deadline", "bukas",
+]
+ALERT_FUZZY_THRESHOLD = 88     # rapidfuzz partial_ratio
+ALERT_COOLDOWN_S = 20          # per-keyword cooldown
+ALERT_LLM_MODEL = LLM_DEFAULT  # qwen2.5:1.5b intent check
+ALERT_LLM_TIMEOUT = 4.0        # on timeout, the keyword hit stands
+ALERT_USE_LLM = True           # fuzzy pre-filter, then LLM intent confirm
+
+# --- Catch me up ---
+CATCHUP_MINUTES = 5
+CATCHUP_MODEL = LLM_DEFAULT    # qwen2.5:1.5b
+CATCHUP_TIMEOUT = 12.0         # extractive fallback beyond this
+CATCHUP_MAX_WORDS = 900
 
 # --- hallucination filter ---
 # Whole-segment strings whisper emits in silence/noise.

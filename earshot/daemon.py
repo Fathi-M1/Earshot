@@ -243,6 +243,11 @@ def _live_page(token: str) -> str:
   .np .sub{{ font-size:13px; color:var(--sage); margin-top:4px; }}
   .kv{{ display:flex; justify-content:space-between; font:400 13px/1.8 ui-monospace,monospace; }}
   .kv .k{{ color:var(--sage); }}
+  .cv{{ border:1px solid rgba(169,184,156,.4); border-radius:8px; padding:6px 10px; font-size:13px;
+        background:transparent; color:var(--beige); cursor:pointer; }}
+  .cv.on{{ background:var(--moss); border-color:var(--moss); }}
+  .row .eng[dir="rtl"], .orig[dir="rtl"]{{ direction:rtl; text-align:right;
+        font-family:"Geeza Pro","Noto Naskh Arabic",system-ui,sans-serif; }}
 </style></head>
 <body>
   <header>
@@ -264,6 +269,27 @@ def _live_page(token: str) -> str:
       <div class="card">
         <h2>Now playing (sent to watch / lock screen)</h2>
         <div class="np"><div class="big" id="npTitle">—</div><div class="sub" id="npArtist"></div></div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h2>Conversation</h2>
+        <div style="font:400 11px/1 ui-monospace,monospace;color:var(--sage);text-transform:uppercase;margin-bottom:6px">They speak</div>
+        <div id="theirChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+          <button class="cv" data-their="ar">Arabic</button><button class="cv" data-their="tl">Tagalog</button>
+          <button class="cv" data-their="es">Spanish</button><button class="cv" data-their="en">English</button>
+        </div>
+        <div style="font:400 11px/1 ui-monospace,monospace;color:var(--sage);text-transform:uppercase;margin-bottom:6px">I speak</div>
+        <div id="mineChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+          <button class="cv" data-mine="en">English</button><button class="cv" data-mine="tl">Tagalog</button>
+          <button class="cv" data-mine="es">Spanish</button><button class="cv" data-mine="ar">Arabic</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <button class="cv turn" data-turn="them" style="flex:1;height:40px">Them</button>
+          <button class="cv turn" data-turn="me" style="flex:1;height:40px">Me</button>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="cv" id="catchBtn" style="flex:1;height:40px">Catch me up</button>
+          <button class="cv" id="muteBtn" style="flex:1;height:40px">Mute</button>
+        </div>
       </div>
       <div class="card" style="margin-top:16px">
         <h2>Privacy / status</h2>
@@ -295,6 +321,7 @@ def _live_page(token: str) -> str:
       document.getElementById('npTitle').textContent = m.title || '';
       document.getElementById('npArtist').textContent = m.artist || '';
       setState(m.state || '');
+      curMuted = (m.state === 'MUTED'); syncConv();
     }} else if (m.type === 'caption'){{
       if (!m.committed){{
         document.getElementById('partial').textContent =
@@ -302,11 +329,16 @@ def _live_page(token: str) -> str:
         return;
       }}
       document.getElementById('partial').textContent = '';
-      const match = (m.matched && m.matched.length) ? 'match' : '';
-      const eng = (m.english && m.english !== m.original) ? `<div class="eng">→ ${{m.english}}</div>` : '';
-      addRow(`<div class="t">${{hhmmss(m.ts)}}</div><div class="lang">${{m.lang||'?'}}</div>`+
-             `<div><div class="orig">${{m.original}}</div>${{eng}}`+
-             (match?` <div class="eng">⬥ ${{m.matched.join(', ')}}</div>`:'')+`</div>`, match);
+      const match = (m.alert || (m.matched && m.matched.length)) ? 'match' : '';
+      const who = (m.speaker==='me'?'You':'Them');
+      const p = m.primary||{{text:m.original}}, s = m.secondary||{{}};
+      const pd = p.rtl? ' dir="rtl"':''; const sd = s.rtl? ' dir="rtl"':'';
+      const sec = s.text ? `<div class="eng"${{sd}}>${{s.text}}</div>` : '';
+      addRow(`<div class="t">${{hhmmss(m.ts)}}</div><div class="lang">${{m.lang||'?'}}·${{who}}</div>`+
+             `<div><div class="orig"${{pd}}>${{p.text||''}}</div>${{sec}}`+
+             (match?` <div class="eng">⬥ ${{(m.matched||[]).join(', ')}}</div>`:'')+`</div>`, match);
+    }} else if (m.type === 'conv'){{
+      curConv = {{their:m.their, mine:m.mine, turn:m.turn}}; syncConv();
     }} else if (m.type === 'event'){{
       addRow(`<div class="t">${{hhmmss(m.ts)}}</div><div class="lang">·</div>`+
              `<div class="orig">[${{m.kind}}] ${{m.detail||''}}</div>`, 'evt');
@@ -325,6 +357,23 @@ def _live_page(token: str) -> str:
   }}
   document.getElementById('liveBtn').onclick = () => setMode('live');
   document.getElementById('counterBtn').onclick = () => setMode('counter');
+
+  // conversation controls
+  let curConv = {{their:'ar', mine:'en', turn:'them'}}, curMuted=false;
+  function post(path, body){{ return fetch(path, {{method:'POST', headers:{{'content-type':'application/json'}}, body:JSON.stringify(body||{{}})}}); }}
+  function syncConv(){{
+    document.querySelectorAll('[data-their]').forEach(b=>b.classList.toggle('on', b.dataset.their===curConv.their));
+    document.querySelectorAll('[data-mine]').forEach(b=>b.classList.toggle('on', b.dataset.mine===curConv.mine));
+    document.querySelectorAll('[data-turn]').forEach(b=>b.classList.toggle('on', b.dataset.turn===curConv.turn));
+    const mb=document.getElementById('muteBtn'); mb.classList.toggle('on',curMuted); mb.textContent=curMuted?'Muted':'Mute';
+  }}
+  document.querySelectorAll('[data-their]').forEach(b=>b.onclick=()=>{{ post('/conv',{{their:b.dataset.their}}); curConv.their=b.dataset.their; syncConv(); }});
+  document.querySelectorAll('[data-mine]').forEach(b=>b.onclick=()=>{{ post('/conv',{{mine:b.dataset.mine}}); curConv.mine=b.dataset.mine; syncConv(); }});
+  document.querySelectorAll('[data-turn]').forEach(b=>b.onclick=()=>{{ post('/conv',{{turn:b.dataset.turn}}); curConv.turn=b.dataset.turn; syncConv(); }});
+  document.getElementById('catchBtn').onclick=()=>post('/catchup');
+  document.getElementById('muteBtn').onclick=()=>post(curMuted?'/unmute':'/mute');
+  fetch('/conv').then(r=>r.json()).then(c=>{{ curConv={{their:c.their,mine:c.mine,turn:c.turn}}; curMuted=!!c.muted; syncConv(); }}).catch(()=>{{}});
+
   async function poll(){{
     try {{
       const h = await (await fetch('/health')).json();
@@ -382,12 +431,53 @@ def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[Fa
             return JSONResponse({"error": str(exc)}, status_code=400)
         return JSONResponse(result)
 
+    async def _conv(request: Request) -> JSONResponse:
+        body = await request.json()
+        return JSONResponse(
+            controller.set_conv(body.get("their"), body.get("mine"), body.get("turn"))
+        )
+
+    async def _get_conv() -> JSONResponse:
+        return JSONResponse({**controller.conv, "muted": controller.muted, "state": controller.state})
+
+    async def _catchup() -> JSONResponse:
+        return JSONResponse(await run_in_threadpool(controller.catch_up))
+
+    async def _mute() -> JSONResponse:
+        return JSONResponse(await run_in_threadpool(controller.mute, True))
+
+    async def _unmute() -> JSONResponse:
+        return JSONResponse(await run_in_threadpool(controller.mute, False))
+
+    for app in (dash, phone):
+        app.add_api_route("/conv", _conv, methods=["POST"])
+        app.add_api_route("/conv", _get_conv, methods=["GET"])
+        app.add_api_route("/catchup", _catchup, methods=["POST"])
+        app.add_api_route("/mute", _mute, methods=["POST"])
+        app.add_api_route("/unmute", _unmute, methods=["POST"])
+
+    async def _route_button(raw: str) -> None:
+        try:
+            msg = json.loads(raw)
+        except Exception:
+            return
+        if msg.get("type") != "button":
+            return
+        action = msg.get("action")
+        if action == "catchup":
+            await run_in_threadpool(controller.catch_up)
+        elif action == "mute":
+            await run_in_threadpool(controller.mute, True)
+        elif action == "unmute":
+            await run_in_threadpool(controller.mute, False)
+        # 'bookmark' is a later phase (P3); ignore for now.
+
     @dash.websocket("/ws")
     async def dash_ws(ws: WebSocket) -> None:
         await hub.connect(ws)
         try:
             while True:
-                await ws.receive_text()  # dashboard may send button events later
+                await _route_button(await ws.receive_text())
         except WebSocketDisconnect:
             await hub.disconnect(ws)
         except Exception:
@@ -485,7 +575,7 @@ def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[Fa
         await hub.connect(ws, accept=False)  # already accepted above
         try:
             while True:
-                await ws.receive_text()  # phone sends button events later (P3)
+                await _route_button(await ws.receive_text())
         except WebSocketDisconnect:
             await hub.disconnect(ws)
         except Exception:

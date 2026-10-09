@@ -48,7 +48,7 @@ export function How() {
               <p className="body">{steps[0].body}</p>
             </article>
           </Reveal>
-          <Reveal delay={80}>
+          <Reveal delay={60}>
             <article className="how-step">
               <div className="how-visual how-alert">
                 <TileArt name="alert" size={148} radius={14} />
@@ -65,7 +65,7 @@ export function How() {
               <p className="body">{steps[1].body}</p>
             </article>
           </Reveal>
-          <Reveal delay={160}>
+          <Reveal delay={120}>
             <article className="how-step">
               <div className="how-visual is-watch">
                 <WatchFace title={sample.alert} artist={sample.artist} />

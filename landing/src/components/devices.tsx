@@ -22,11 +22,21 @@ export function IPhone({
   );
 }
 
-export function WatchFace({ title, artist }: { title: string; artist: string }) {
+export function WatchFace({
+  title,
+  artist,
+  className,
+  alert = false,
+}: {
+  title: string;
+  artist: string;
+  className?: string;
+  alert?: boolean;
+}) {
   return (
-    <div className="watch" aria-hidden="true">
+    <div className={cn("watch", className)} aria-hidden="true">
       <div className="watch-bezel">
-        <div className="watch-screen">
+        <div className={cn("watch-screen", alert && "is-alert")}>
           <p className="watch-source">iPhone</p>
           <p className="watch-title">{title}</p>
           <p className="watch-artist">{artist}</p>
