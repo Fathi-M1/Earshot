@@ -205,14 +205,16 @@ class LiveController:
                 self._emit({"type": "event", "kind": "asr_error", "detail": str(exc), "ts": _ms()})
 
     def _warm_background(self) -> None:
+        # Only warm what the live path uses (1.5b for translate/alerts/catch-up +
+        # nomic for recall). 3b is NOT on the hot path — prewarming it stole CPU
+        # from ASR and caused multi-second partial spikes at session start.
+        llm.prewarm(config.LLM_DEFAULT)
         try:
-            self._accurate.load()
+            recall._embed("warm", "search_document: ")
         except Exception:
             pass
-        llm.prewarm(config.LLM_DEFAULT)
-        llm.prewarm(config.LLM_HEAVY)
-        try:  # warm the embedder so the first recall line indexes fast
-            recall._embed("warm", "search_document: ")
+        try:
+            self._accurate.load()  # small, for background refine (load last)
         except Exception:
             pass
         self._emit({"type": "event", "kind": "warm", "detail": "models ready", "ts": _ms()})

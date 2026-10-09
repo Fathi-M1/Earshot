@@ -24,9 +24,11 @@ CONV_DEFAULT = {"their": "ar", "mine": "en", "turn": "them"}
 
 # --- ASR models (multilingual; NOT the .en models) ---
 # Two-tier: FAST drives partials + the instant commit; ACCURATE refines in the
-# background and replaces the line. Speed beats everything.
-ASR_FAST = "base"            # fast partials + instant commit (beam 1)
-ASR_ACCURATE = "small"       # background refine (beam 1)
+# background and replaces the line. Speed beats everything. On this Iris Xe CPU
+# base RTF ~0.88 (measured) can't stream at 0.7s, so FAST=tiny (RTF ~0.3);
+# small refines in the background.
+ASR_FAST = "tiny"            # fast partials + instant commit + xx->en translate (beam 1)
+ASR_ACCURATE = "small"       # background re-transcribe for accuracy (beam 1)
 ASR_MODEL = ASR_FAST         # back-compat for bench/asr default
 ASR_MODEL_FALLBACK = "tiny"
 ASR_BEAM_COMMIT = 1          # NEVER beam-search on the hot path

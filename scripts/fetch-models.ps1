@@ -5,8 +5,9 @@ Set-Location $PSScriptRoot\..
 
 New-Item -ItemType Directory -Force -Path .\models\whisper, .\models\piper | Out-Null
 
-Write-Host "Downloading faster-whisper models (tiny.en, base.en, base)..."
-uv run python -c "from faster_whisper import WhisperModel as W; [W(m, device='cpu', compute_type='int8', download_root='models/whisper') for m in ['tiny.en','base.en','base']]; print('whisper OK')"
+Write-Host "Downloading faster-whisper models (tiny, base, small multilingual)..."
+# tiny = fast tier (partials + instant commit), small = accurate refine.
+uv run python -c "from faster_whisper import WhisperModel as W; [W(m, device='cpu', compute_type='int8', download_root='models/whisper') for m in ['tiny','base','small']]; print('whisper OK')"
 
 Write-Host "Downloading Piper voice (en_US-lessac-medium)..."
 # Piper is added in Phase 4; this is a no-op until piper-tts is a dependency.
