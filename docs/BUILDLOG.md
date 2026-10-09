@@ -33,3 +33,11 @@ Planning docs and brand kit were prepared before the build (disclosed in README)
 - Alerts: rapidfuzz + metaphone keyword match → qwen2.5:1.5b intent confirm (4s, keyword stands on timeout), 20s cooldown; amber row + watch ⬥ title 8s + laptop chime.
 - Catch me up: qwen2.5:1.5b 2-line summary of last 5 min → local TTS (pyttsx3 SAPI; Piper hook) + extractive fallback; LLMs prewarmed on live start (fixes cold-load timeout).
 - Mute: Pause → mic closed instantly, MUTED on every surface. Persistent phone token + WS auth fix (token from /config, close code/reason shown). 42 tests passing.
+
+## P2 big build — modes, recall, notes, privacy, install
+- **Privacy fix (D):** localclient now separates internet (public, 0 by construction) from local (loopback/Ollama) bytes; HF_HUB_OFFLINE/TRANSFORMERS_OFFLINE set at import; psutil egress proof on a 5s background timer. Verified live: after Ollama prewarm, internet_bytes=0, internet_connections=0, local_bytes=212/924. Arabic "安娜" bug fixed with a foreign-script sanitizer (rejects drifted translations). Garmin chunks ≤28 (unit-tested).
+- **Modes (A):** ambient (auto-detect→read language, announcements + questions-to-me alerts, 10-min + on-demand insight cards via 1.5b), captions (read-language translate, A-/A+ size, speaker-changed divider), translate (unchanged Them/Me). Switchers on phone + /live.
+- **Recall (B):** nomic-embed-text + SQLite semantic search; /recall → top-3 quotes + 1-line answer; verified top hit cosine 0.726 for "when is the quiz?". Search box on phone + /live.
+- **Notes (C):** End session → 1.5b notes + dateparser (handles "next Friday" via modifier-strip) + hand-written .ics (validated with icalendar). Sessions list + .ics download.
+- **Install/QR (E):** scripts/install.ps1 (uv, Ollama, models, Start-menu shortcut) + start.ps1; QR of the phone URL on /live (/qr.png) and printed to the terminal on serve.
+- 56 tests passing. All new endpoints smoke-tested live.
