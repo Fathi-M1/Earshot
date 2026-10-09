@@ -20,3 +20,9 @@ Planning docs and brand kit were prepared before the build (disclosed in README)
 - Languages = English/Tagalog/Arabic: multilingual whisper `base` (auto-detect), caption bar shows original, Now Playing (watch/lock) shows English (task=translate). LLM default `qwen2.5:1.5b`. Downloaded whisper `small` (use if RTF allows).
 - `audio.py` RAM ring mic, `asr.py` multilingual transcriber, `live.py` controller; daemon `/live` dashboard shows every caption + detected language + events, with a Counter↔Live toggle. Smoke-tested: mic opens, model warms (loading→ready), events stream over WS, mode toggles, bytes-to-internet stays 0, /health responsive (43 ms/3 calls after offloading blocking calls to a threadpool).
 - `earshot serve --live` starts in live mode; default stays counter (for the latency film).
+
+## P1 quality pass
+- Languages restricted to en/tl/ar/es (detect highest-prob among them); whisper small (fallback base), beam 5 commit / beam 1 partial; Taglish initial_prompt; anti-repetition + hallucination filter. VAD endpointing: partials while speaking, commit on pause / 12 s cap. Smoke-tested live: loading→ready, 22 s silence with no false captions, worker survives errors.
+- Phone is one installable PWA (manifest + Host Grotesk + icons from design/). Foreground = full-screen captions (last 3 lines, English under original, Wake Lock); background/locked = Media Session rolling ≤28-char chunks, alert override 8 s. On-page diagnostic reports standalone/tab + Media Session presence — **Fathi to verify iOS standalone Media Session; fall back to a Safari tab if it dies (I can't test iOS from here).**
+- Laptop caption bar `earshot bar` (frameless, topmost, draggable, Ctrl+Alt+C global toggle, WS-driven).
+- bench mirrors the live commit pass with per-language RTF incl. Spanish. 31 tests passing.
