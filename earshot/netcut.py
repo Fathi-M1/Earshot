@@ -16,6 +16,7 @@ is also wired to run on daemon exit so the laptop is never left cut off.
 from __future__ import annotations
 
 import subprocess
+import time
 from dataclasses import dataclass
 
 from . import brand
@@ -133,3 +134,18 @@ def status() -> NetResult:
 def is_cut() -> bool:
     res = status()
     return res.ok and bool(res.output)
+
+
+_cut_cache: tuple[float, bool] = (0.0, False)
+
+
+def is_cut_cached(ttl: float = 5.0) -> bool:
+    """is_cut() with a short TTL so a polled /health endpoint doesn't spawn a
+    PowerShell process on every request."""
+    global _cut_cache
+    now = time.monotonic()
+    ts, val = _cut_cache
+    if now - ts > ttl:
+        val = is_cut()
+        _cut_cache = (now, val)
+    return val

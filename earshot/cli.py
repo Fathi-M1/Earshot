@@ -19,7 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 def _cmd_serve(args: argparse.Namespace) -> int:
     from . import daemon
 
-    daemon.serve(tick=not args.no_tick)
+    daemon.serve(tick=not args.no_tick, start_live=args.live)
     return 0
 
 
@@ -147,6 +147,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("serve", help="run the daemon (dashboard + phone server)")
     sp.add_argument("--no-tick", action="store_true", help="don't emit the P0 counter tick")
+    sp.add_argument("--live", action="store_true", help="start in live caption mode (mic open) instead of counter")
     sp.set_defaults(func=_cmd_serve)
 
     bp = sub.add_parser("bench", help="measure ASR RTF/WER and Ollama tokens/s")

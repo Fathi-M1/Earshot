@@ -25,10 +25,12 @@ import wave
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from starlette.concurrency import run_in_threadpool
 
 from . import brand, netcut
+from .live import LiveController
 from .localclient import counters as net_counters
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -172,17 +174,162 @@ def _laptop_page(token: str) -> str:
 </body></html>"""
 
 
-def build_apps(hub: Hub) -> tuple[FastAPI, FastAPI]:
+def _live_page(token: str) -> str:
+    """Dashboard live log (127.0.0.1:7777/live): captions, detected language,
+    events, and the counter/live mode toggle. Confirms capture during testing."""
+    display = brand.display_name()
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{display} · live</title>
+<style>
+  :root{{ color-scheme:dark; --fd:#12241A; --f:#1F3A24; --moss:#3D5A40; --sage:#A9B89C;
+         --beige:#DDE3D3; --needs:#C9A45C; --fern:#8FA876; --glow:#7FB3D5; }}
+  *{{ box-sizing:border-box; }}
+  body{{ margin:0; background:var(--fd); color:var(--beige);
+        font-family:ui-sans-serif,system-ui,sans-serif; }}
+  header{{ display:flex; align-items:center; gap:14px; padding:14px 20px;
+          border-bottom:1px solid rgba(169,184,156,.2); }}
+  header .mark{{ width:22px; height:22px; border-radius:7px; background:var(--f);
+               display:flex; align-items:center; justify-content:center; }}
+  header .mark .d{{ width:7px; height:7px; border-radius:50%; background:var(--glow); }}
+  h1{{ font-size:17px; font-weight:600; margin:0; }}
+  .pill{{ font:400 11px/1 ui-monospace,monospace; letter-spacing:.08em; text-transform:uppercase;
+         border:1px solid rgba(169,184,156,.4); border-radius:6px; padding:5px 8px; color:var(--sage); }}
+  .pill.live{{ color:var(--fern); border-color:var(--fern); }}
+  .pill.alert{{ color:var(--needs); border-color:var(--needs); }}
+  .spacer{{ flex:1; }}
+  button{{ height:32px; padding:0 14px; border-radius:8px; border:1px solid rgba(169,184,156,.4);
+          background:transparent; color:var(--beige); font-size:13px; font-weight:500; cursor:pointer; }}
+  button.on{{ background:var(--beige); color:var(--fd); border-color:var(--beige); }}
+  .wrap{{ display:grid; grid-template-columns:1fr 340px; gap:20px; padding:20px; max-width:1200px; }}
+  .card{{ background:var(--f); border-radius:14px; padding:18px; }}
+  .card h2{{ font:400 11px/1 ui-monospace,monospace; letter-spacing:.1em; text-transform:uppercase;
+            color:var(--sage); margin:0 0 12px; }}
+  #log{{ display:flex; flex-direction:column; gap:8px; max-height:72vh; overflow:auto; }}
+  .row{{ display:grid; grid-template-columns:72px 44px 1fr; gap:10px; align-items:baseline;
+        padding:8px 0; border-bottom:1px solid rgba(169,184,156,.12); }}
+  .t{{ font:400 12px/1.3 ui-monospace,monospace; color:var(--sage); }}
+  .lang{{ font:400 11px/1 ui-monospace,monospace; text-transform:uppercase; color:var(--fd);
+         background:var(--sage); border-radius:5px; padding:3px 5px; text-align:center; }}
+  .orig{{ font-size:15px; font-weight:600; }}
+  .eng{{ font-size:13px; color:var(--sage); }}
+  .row.match .orig{{ color:var(--needs); }}
+  .row.match .lang{{ background:var(--needs); }}
+  .evt .orig{{ color:var(--sage); font-weight:400; font-style:normal; }}
+  .np .big{{ font-size:22px; font-weight:600; min-height:1.3em; }}
+  .np .sub{{ font-size:13px; color:var(--sage); margin-top:4px; }}
+  .kv{{ display:flex; justify-content:space-between; font:400 13px/1.8 ui-monospace,monospace; }}
+  .kv .k{{ color:var(--sage); }}
+</style></head>
+<body>
+  <header>
+    <div class="mark"><div class="d"></div></div>
+    <h1>{display} · live</h1>
+    <span class="pill" id="statePill">—</span>
+    <span class="pill" id="connPill">connecting…</span>
+    <div class="spacer"></div>
+    <button id="counterBtn">Counter (film)</button>
+    <button id="liveBtn">Go live (mic)</button>
+  </header>
+  <div class="wrap">
+    <div class="card">
+      <h2>Live log — every caption, detected language, event</h2>
+      <div id="log"></div>
+    </div>
+    <div>
+      <div class="card">
+        <h2>Now playing (sent to watch / lock screen)</h2>
+        <div class="np"><div class="big" id="npTitle">—</div><div class="sub" id="npArtist"></div></div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h2>Privacy / status</h2>
+        <div class="kv"><span class="k">mode</span><span id="kMode">—</span></div>
+        <div class="kv"><span class="k">bytes to internet</span><span id="kBytes">—</span></div>
+        <div class="kv"><span class="k">internet cut</span><span id="kCut">—</span></div>
+      </div>
+    </div>
+  </div>
+<script>
+  const token = "{token}";
+  const log = document.getElementById('log');
+  function pad(v,n=2){{ return String(v).padStart(n,'0'); }}
+  function hhmmss(ts){{ const d = ts ? new Date(ts) : new Date();
+    return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds()); }}
+  function addRow(html, cls){{
+    const div = document.createElement('div');
+    div.className = 'row ' + (cls||'');
+    div.innerHTML = html;
+    log.prepend(div);
+    while (log.childElementCount > 200) log.removeChild(log.lastChild);
+  }}
+  function setState(state){{
+    const p = document.getElementById('statePill');
+    p.textContent = state; p.className = 'pill' + (state==='ALERT'?' alert':(state==='LISTENING'?' live':''));
+  }}
+  function onMsg(m){{
+    if (m.type === 'track'){{
+      document.getElementById('npTitle').textContent = m.title || '';
+      document.getElementById('npArtist').textContent = m.artist || '';
+      setState(m.state || '');
+    }} else if (m.type === 'caption'){{
+      const match = (m.matched && m.matched.length) ? 'match' : '';
+      const eng = (m.english && m.english !== m.original) ? `<div class="eng">→ ${{m.english}}</div>` : '';
+      addRow(`<div class="t">${{hhmmss(m.ts)}}</div><div class="lang">${{m.lang||'?'}}</div>`+
+             `<div><div class="orig">${{m.original}}</div>${{eng}}`+
+             (match?` <div class="eng">⬥ ${{m.matched.join(', ')}}</div>`:'')+`</div>`, match);
+    }} else if (m.type === 'event'){{
+      addRow(`<div class="t">${{hhmmss(m.ts)}}</div><div class="lang">·</div>`+
+             `<div class="orig">[${{m.kind}}] ${{m.detail||''}}</div>`, 'evt');
+    }}
+  }}
+  let ws;
+  function connect(){{
+    ws = new WebSocket(`ws://${{location.host}}/ws`);
+    ws.onopen = () => document.getElementById('connPill').textContent = 'live';
+    ws.onclose = () => {{ document.getElementById('connPill').textContent = 'reconnecting…'; setTimeout(connect, 600); }};
+    ws.onmessage = (e) => {{ try {{ onMsg(JSON.parse(e.data)); }} catch(_){{}} }};
+  }}
+  connect();
+  async function setMode(mode){{
+    await fetch('/mode', {{ method:'POST', headers:{{'content-type':'application/json'}}, body: JSON.stringify({{mode}}) }});
+  }}
+  document.getElementById('liveBtn').onclick = () => setMode('live');
+  document.getElementById('counterBtn').onclick = () => setMode('counter');
+  async function poll(){{
+    try {{
+      const h = await (await fetch('/health')).json();
+      document.getElementById('kMode').textContent = h.mode;
+      document.getElementById('kBytes').textContent = h.bytes_sent;
+      document.getElementById('kCut').textContent = h.net_cut ? 'yes' : 'no';
+      document.getElementById('liveBtn').classList.toggle('on', h.mode==='live');
+      document.getElementById('counterBtn').classList.toggle('on', h.mode==='counter');
+    }} catch(_){{}}
+    setTimeout(poll, 1500);
+  }}
+  poll();
+</script>
+</body></html>"""
+
+
+def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[FastAPI, FastAPI]:
     dash = FastAPI(title=f"{brand.display_name()} daemon")
     phone = FastAPI(title=f"{brand.display_name()} phone")
+    if controller is None:
+        controller = LiveController(hub)
 
     @dash.get("/", response_class=HTMLResponse)
     async def dash_root() -> str:
         return _laptop_page(hub.token)
 
+    @dash.get("/live", response_class=HTMLResponse)
+    async def dash_live() -> str:
+        return _live_page(hub.token)
+
     @dash.get("/health")
     async def health() -> JSONResponse:
         c = net_counters()
+        net_cut = await run_in_threadpool(netcut.is_cut_cached)  # may spawn PowerShell
         return JSONResponse(
             {
                 "ok": True,
@@ -190,9 +337,21 @@ def build_apps(hub: Hub) -> tuple[FastAPI, FastAPI]:
                 "bytes_sent": c.bytes_sent,
                 "bytes_recv": c.bytes_recv,
                 "phone_token": hub.token,
-                "net_cut": False,  # P0: reported live in P3
+                "mode": controller.mode,
+                "net_cut": net_cut,
             }
         )
+
+    @dash.post("/mode")
+    async def set_mode(request: Request) -> JSONResponse:
+        body = await request.json()
+        mode = body.get("mode", "")
+        try:
+            # set_mode blocks (mic open/close, thread join, model load) — offload.
+            result = await run_in_threadpool(controller.set_mode, mode)
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse(result)
 
     @dash.websocket("/ws")
     async def dash_ws(ws: WebSocket) -> None:
@@ -248,44 +407,51 @@ def build_apps(hub: Hub) -> tuple[FastAPI, FastAPI]:
     return dash, phone
 
 
-async def _tick_loop(hub: Hub) -> None:
-    """Phase 0: broadcast an incrementing counter every TICK_SECONDS."""
+async def _tick_loop(hub: Hub, controller: LiveController) -> None:
+    """Phase 0: broadcast an incrementing counter every TICK_SECONDS — but only
+    while in counter mode. In live mode the mic worker drives the surfaces."""
     n = 0
     while True:
-        await hub.publish(title=str(n), artist=f"{brand.display_name()} counter", n=n)
-        n += 1
+        if controller.mode == "counter":
+            await hub.publish(title=str(n), artist=f"{brand.display_name()} counter", n=n)
+            n += 1
         await asyncio.sleep(TICK_SECONDS)
 
 
-async def _serve_async(hub: Hub, *, tick: bool) -> None:
+async def _serve_async(hub: Hub, controller: LiveController, *, tick: bool, start_live: bool) -> None:
     import uvicorn
 
-    dash, phone = build_apps(hub)
+    dash, phone = build_apps(hub, controller)
+    controller.attach_loop(asyncio.get_running_loop())
+    if start_live:
+        controller.set_mode("live")
     servers = [
         uvicorn.Server(uvicorn.Config(dash, host=DASH_HOST, port=DASH_PORT, log_level="warning")),
         uvicorn.Server(uvicorn.Config(phone, host=PHONE_HOST, port=PHONE_PORT, log_level="warning")),
     ]
     coros = [s.serve() for s in servers]
     if tick:
-        coros.append(_tick_loop(hub))
+        coros.append(_tick_loop(hub, controller))
     await asyncio.gather(*coros)
 
 
-def serve(*, tick: bool = True) -> None:
-    """Run the daemon. Always restores internet on exit."""
+def serve(*, tick: bool = True, start_live: bool = False) -> None:
+    """Run the daemon. Always restores internet + releases the mic on exit."""
     hub = Hub()
+    controller = LiveController(hub)
     display = brand.display_name()
     print(f"{display} daemon")
-    print(f"  dashboard : http://{DASH_HOST}:{DASH_PORT}/")
+    print(f"  dashboard : http://{DASH_HOST}:{DASH_PORT}/        (counter page for the latency film)")
+    print(f"  live log  : http://{DASH_HOST}:{DASH_PORT}/live    (captions + detected language + events)")
     print(f"  phone     : http://<laptop-ip>:{PHONE_PORT}/?t={hub.token}")
     print(f"  (phone token: {hub.token})")
-    if tick:
-        print(f"  P0 counter tick every {TICK_SECONDS:g}s — film the Garmin + iPhone + laptop clock")
+    print(f"  mode      : {'live (mic open)' if start_live else 'counter (film) — toggle on /live'}")
     try:
-        asyncio.run(_serve_async(hub, tick=tick))
+        asyncio.run(_serve_async(hub, controller, tick=tick, start_live=start_live))
     except KeyboardInterrupt:
         pass
     finally:
+        controller.shutdown()
         res = netcut.restore()
         if res.ok and res.output:
             print("restored internet (removed firewall block rules)")

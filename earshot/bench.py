@@ -25,8 +25,10 @@ WHISPER_ROOT = REPO_ROOT / "models" / "whisper"
 BENCH_TXT = REPO_ROOT / "docs" / "bench.txt"
 
 OLLAMA = "http://127.0.0.1:11434"
-DEFAULT_ASR_MODELS = ["tiny.en", "base.en", "base"]
-DEFAULT_LLM_MODELS = ["qwen2.5:3b", "qwen2.5:1.5b"]
+# Multilingual models (auto-detect): English, Tagalog, Arabic. NOT the .en models.
+DEFAULT_ASR_MODELS = ["base", "small"]
+DEFAULT_LLM_MODELS = ["qwen2.5:1.5b", "qwen2.5:3b"]
+KNOWN_LANGS = {"en", "tl", "ar"}
 
 
 # ---------------------------------------------------------------- ASR ----------
@@ -36,11 +38,15 @@ DEFAULT_LLM_MODELS = ["qwen2.5:3b", "qwen2.5:1.5b"]
 class AsrRow:
     model: str
     wav: str
+    lang_file: str       # language tag parsed from the filename prefix (en-/tl-/ar-)
+    lang_detected: str   # language whisper auto-detected
     audio_s: float
-    proc_s: float
-    rtf: float
+    proc_s: float        # transcribe time
+    rtf: float           # transcribe RTF (vs the <= 0.5 budget)
+    translate_rtf: float | None
     wer: float | None
-    text: str
+    original: str
+    english: str
 
 
 def _load_model(name: str):
@@ -62,15 +68,28 @@ def _decode(path: Path):
     return decode_audio(str(path), sampling_rate=16000)
 
 
-def _transcribe(model, samples) -> str:
-    segments, _info = model.transcribe(
+def _lang_from_name(name: str) -> str:
+    stem = name.lower()
+    for sep in ("-", "_", "."):
+        if sep in stem:
+            head = stem.split(sep, 1)[0]
+            if head in KNOWN_LANGS:
+                return head
+    return stem[:2] if stem[:2] in KNOWN_LANGS else "?"
+
+
+def _run(model, samples, task: str, language: str | None = None):
+    segments, info = model.transcribe(
         samples,
+        task=task,
+        language=language,
         beam_size=1,
         vad_filter=True,
         condition_on_previous_text=False,
         no_speech_threshold=0.6,
     )
-    return " ".join(s.text.strip() for s in segments).strip()
+    text = " ".join(s.text.strip() for s in segments).strip()
+    return text, info
 
 
 def _wer(ref: str, hyp: str) -> float | None:
@@ -87,33 +106,44 @@ def bench_asr(models: list[str] | None = None) -> list[AsrRow]:
     wavs = sorted(AUDIO_DIR.glob("*.wav"))
     if not wavs:
         raise FileNotFoundError(
-            f"No WAVs in {AUDIO_DIR}. Record a few short clips there first "
-            f"(16 kHz mono preferred; a matching <name>.txt enables WER)."
+            f"No WAVs in {AUDIO_DIR}. Record short clips there named by language, "
+            f"e.g. en-1.wav, tl-1.wav, ar-1.wav (16 kHz mono; a matching <name>.txt enables WER)."
         )
     rows: list[AsrRow] = []
-    # Pre-decode once; reuse across models.
     decoded = {w: _decode(w) for w in wavs}
     for name in models:
         model = _load_model(name)
-        # Warm the model (not timed).
-        _transcribe(model, decoded[wavs[0]])
+        _run(model, decoded[wavs[0]], task="transcribe")  # warm (not timed)
         for w in wavs:
             samples = decoded[w]
             audio_s = len(samples) / 16000.0
             t0 = time.perf_counter()
-            text = _transcribe(model, samples)
+            original, info = _run(model, samples, task="transcribe")
             proc_s = time.perf_counter() - t0
+            lang_detected = getattr(info, "language", "") or ""
+            # English for the watch/lock screen (translate when non-English).
+            translate_rtf = None
+            if lang_detected == "en":
+                english = original
+            else:
+                t1 = time.perf_counter()
+                english, _ = _run(model, samples, task="translate", language=lang_detected or None)
+                translate_rtf = round((time.perf_counter() - t1) / audio_s, 3) if audio_s else None
             ref_file = w.with_suffix(".txt")
-            wer = _wer(ref_file.read_text(encoding="utf-8").strip(), text) if ref_file.exists() else None
+            wer = _wer(ref_file.read_text(encoding="utf-8").strip(), original) if ref_file.exists() else None
             rows.append(
                 AsrRow(
                     model=name,
                     wav=w.name,
+                    lang_file=_lang_from_name(w.name),
+                    lang_detected=lang_detected,
                     audio_s=round(audio_s, 2),
                     proc_s=round(proc_s, 2),
                     rtf=round(proc_s / audio_s, 3) if audio_s else float("nan"),
+                    translate_rtf=translate_rtf,
                     wer=round(wer, 3) if wer is not None else None,
-                    text=text,
+                    original=original,
+                    english=english,
                 )
             )
     return rows
@@ -170,21 +200,37 @@ def bench_ollama(models: list[str] | None = None) -> list[LlmRow]:
 
 def _format(asr_rows: list[AsrRow], llm_rows: list[LlmRow]) -> str:
     lines: list[str] = []
-    lines.append("## ASR (faster-whisper int8, cpu_threads=4, VAD on, warm; RTF = proc/audio)")
-    lines.append(f"{'model':<9} {'wav':<20} {'audio_s':>8} {'proc_s':>8} {'rtf':>7} {'wer':>7}")
+    lines.append("## ASR (multilingual faster-whisper int8, cpu_threads=4, VAD on, warm; RTF=proc/audio)")
+    lines.append(
+        f"{'model':<7} {'wav':<16} {'file':>4} {'det':>4} {'audio':>6} {'rtf':>6} {'tr_rtf':>7} {'wer':>6}  text"
+    )
     for r in asr_rows:
-        wer = f"{r.wer:.3f}" if r.wer is not None else "—"
-        lines.append(f"{r.model:<9} {r.wav:<20} {r.audio_s:>8.2f} {r.proc_s:>8.2f} {r.rtf:>7.3f} {wer:>7}")
+        wer = f"{r.wer:.2f}" if r.wer is not None else "—"
+        trr = f"{r.translate_rtf:.3f}" if r.translate_rtf is not None else "—"
+        snippet = (r.original[:40] + ("…" if len(r.original) > 40 else "")) if r.original else "(no speech)"
+        lines.append(
+            f"{r.model:<7} {r.wav:<16} {r.lang_file:>4} {r.lang_detected:>4} "
+            f"{r.audio_s:>6.2f} {r.rtf:>6.3f} {trr:>7} {wer:>6}  {snippet}"
+        )
     if asr_rows:
+        lines.append("")
+        lines.append("mean transcribe RTF by model x detected-language (pass <= 0.5):")
+        agg: dict[tuple[str, str], list[float]] = {}
+        for r in asr_rows:
+            agg.setdefault((r.model, r.lang_detected or "?"), []).append(r.rtf)
+        for (m, lang), rtfs in sorted(agg.items()):
+            mean = sum(rtfs) / len(rtfs)
+            verdict = "PASS" if mean <= 0.5 else "FAIL"
+            lines.append(f"  {m:<7} {lang:>4}  {mean:.3f}  {verdict}  (n={len(rtfs)})")
+        lines.append("")
         by_model: dict[str, list[float]] = {}
         for r in asr_rows:
             by_model.setdefault(r.model, []).append(r.rtf)
-        lines.append("")
-        lines.append("mean RTF by model (pass <= 0.5):")
-        for m, rtfs in by_model.items():
+        lines.append("mean transcribe RTF by model (all languages):")
+        for m, rtfs in sorted(by_model.items()):
             mean = sum(rtfs) / len(rtfs)
             verdict = "PASS" if mean <= 0.5 else "FAIL"
-            lines.append(f"  {m:<9} {mean:.3f}  {verdict}")
+            lines.append(f"  {m:<7} {mean:.3f}  {verdict}  -> pick biggest PASS")
     lines.append("")
     lines.append("## Ollama (tokens/s from eval metrics; options num_thread=2)")
     lines.append(f"{'model':<16} {'tokens':>7} {'eval_s':>8} {'tok/s':>8} {'wall_s':>8}")

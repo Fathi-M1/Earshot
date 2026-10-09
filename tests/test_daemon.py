@@ -27,6 +27,27 @@ def test_dashboard_serves_counter_page_and_health():
     assert h["phone_token"] == hub.token
 
 
+def test_dashboard_live_page_renders():
+    _, dash, _ = _apps()
+    client = TestClient(dash)
+    r = client.get("/live")
+    assert r.status_code == 200
+    assert "Live log" in r.text
+    assert "Go live" in r.text
+
+
+def test_mode_endpoint_validates_and_defaults_counter():
+    hub = daemon.Hub()
+    controller = daemon.LiveController(hub)
+    dash, _phone = daemon.build_apps(hub, controller)
+    client = TestClient(dash)
+    bad = client.post("/mode", json={"mode": "banana"})
+    assert bad.status_code == 400
+    ok = client.post("/mode", json={"mode": "counter"})
+    assert ok.status_code == 200
+    assert ok.json()["mode"] == "counter"
+
+
 def test_phone_serves_config_silent_wav_and_art():
     _, _, phone = _apps()
     client = TestClient(phone)
