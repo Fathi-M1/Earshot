@@ -415,11 +415,11 @@ def _live_page(token: str) -> str:
   }}
   function capRowHtml(m){{
     const match = (m.alert || (m.matched && m.matched.length)) ? 'match' : '';
-    const who = (m.speaker==='me'?'You':'Them');
+    const who = m.speaker ? ('·' + (m.speaker==='me'?'You':'Them')) : '';
     const p = m.primary||{{text:m.original}}, s = m.secondary||{{}};
     const pd = p.rtl? ' dir="rtl"':''; const sd = s.rtl? ' dir="rtl"':'';
     const sec = s.text ? `<div class="eng"${{sd}}>${{s.text}}</div>` : '';
-    return {{html:`<div class="t">${{hhmmss(m.ts)}}</div><div class="lang">${{m.lang||'?'}}·${{who}}</div>`+
+    return {{html:`<div class="t">${{hhmmss(m.ts)}}</div><div class="lang">${{m.lang||'?'}}${{who}}</div>`+
            `<div><div class="orig"${{pd}}>${{esc2(p.text||'')}}</div>${{sec}}`+
            (match?` <div class="eng">⬥ ${{(m.matched||[]).join(', ')}}</div>`:'')+`</div>`, match:match}};
   }}

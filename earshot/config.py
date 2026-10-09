@@ -84,6 +84,8 @@ TAGLISH_PROMPT = (
     "Fathi, quiz, exam, deadline, submit, assignment, Lunes, bukas, pagsusulit."
 )
 INITIAL_PROMPTS = {"en": EN_PROMPT, "tl": TAGLISH_PROMPT}
+# Tagalog exact-word fixes for frequent whisper misspellings (from live log).
+TL_FIXES = {"umaarga": "umaga", "ponsusta": "kumusta", "magandan": "magandang"}
 
 # --- LLM (Ollama) --- qwen2.5:3b removed entirely (RAM). Only 1.5b, lazy, 5m idle.
 LLM_DEFAULT = "qwen2.5:1.5b"

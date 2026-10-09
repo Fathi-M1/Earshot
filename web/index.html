@@ -210,12 +210,14 @@
       if (ln._insight){ var ic=document.createElement("div"); ic.innerHTML=insightHtml(ln); stackEl.appendChild(ic.firstChild); return; }
       if (ln.divider){ var dv=document.createElement("div"); dv.className="divider"; dv.textContent="— speaker changed —"; stackEl.appendChild(dv); }
       var div = document.createElement("div");
-      div.className = "line " + (ln.speaker||"them") + (ln.alert?" alert":"") + (ln.pending?" pending":"");
+      div.className = "line " + (ln.speaker||"") + (ln.alert?" alert":"") + (ln.pending?" pending":"");
       var p = ln.primary||{}, s = ln.secondary||{};
-      var who = (ln.speaker==="me"?"You":"Them") + (ln.alert?" · ⬥ alert":"");
+      // "Them/You" label only in Translate (speaker set); otherwise just an alert tag.
+      var whoTxt = ln.speaker ? (ln.speaker==="me"?"You":"Them") + (ln.alert?" · ⬥ alert":"") : (ln.alert?"⬥ alert":"");
+      var who = whoTxt ? '<div class="who">'+whoTxt+'</div>' : '';
       var pr = '<div class="primary"'+(p.rtl?' dir="rtl" lang="'+(p.lang||'')+'"':'')+'>'+esc(p.text)+'</div>';
       var se = s.text ? '<div class="secondary"'+(s.rtl?' dir="rtl" lang="'+(s.lang||'')+'"':'')+'>'+esc(s.text)+'</div>' : '';
-      div.innerHTML = '<div class="who">'+who+'</div>'+pr+se;
+      div.innerHTML = who+pr+se;
       stackEl.appendChild(div);
     });
     if (stick) scrollToLive();

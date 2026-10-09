@@ -33,6 +33,35 @@ def test_set_app_mode_rejects_unknown_language():
     assert c.src_lang == "en"
 
 
+def test_tagalog_exact_word_fixes():
+    from earshot.live import _apply_tl_fixes
+    assert _apply_tl_fixes("Ponsusta po") == "Kumusta po"
+    assert _apply_tl_fixes("Magandan umaarga") == "Magandang umaga"
+    assert _apply_tl_fixes("walang pagbabago") == "walang pagbabago"  # untouched
+
+
+def test_captions_mode_shows_only_transcript_no_translation():
+    c = LiveController(Hub())
+    c.set_app_mode("captions", src_lang="ar")
+    primary, secondary = c._display_for(
+        {"app_mode": "captions", "read_lang": "en", "conv": dict(c.conv)},
+        original="مرحبا", watch_en="hello", lang="ar",
+    )
+    assert primary["text"] == "مرحبا" and primary["lang"] == "ar"  # spoken transcript
+    assert secondary == {}  # NO translation line
+
+
+def test_translate_mode_has_translation_and_speaker():
+    c = LiveController(Hub())
+    c.set_app_mode("translate")
+    c.set_conv(their="ar", mine="en", turn="them")
+    primary, secondary = c._display_for(
+        {"app_mode": "translate", "read_lang": "en", "conv": dict(c.conv)},
+        original="مرحبا", watch_en="hello", lang="ar",
+    )
+    assert primary["text"] == "hello" and secondary["text"] == "مرحبا"
+
+
 def test_refine_latest_wins_drops_stale():
     c = LiveController(Hub())
     emitted = []

@@ -40,6 +40,17 @@ def _looks_tagalog(text: str) -> bool:
     return len(words & _TAGALOG_MARKERS) >= 2
 
 
+def _apply_tl_fixes(text: str) -> str:
+    """Exact-word replacements for frequent Tagalog misspellings (case-preserving-ish)."""
+    def fix(w: str) -> str:
+        core = w.strip(".,?!").lower()
+        repl = config.TL_FIXES.get(core)
+        if not repl:
+            return w
+        return repl.capitalize() if w[:1].isupper() else repl
+    return " ".join(fix(w) for w in text.split())
+
+
 _QUESTION_WORDS = ("what", "where", "when", "who", "why", "how", "did", "do", "are", "is", "can", "could", "will")
 
 
@@ -355,9 +366,11 @@ class LiveController:
         commit_ms = int((time.perf_counter() - t0) * 1000)
         self._cid += 1
         cid = self._cid
-        divider = (now - self._last_commit_mono) > 1.5
+        is_translate = self.app_mode == "translate"
+        # "speaker changed" divider + Them/You labels exist ONLY in Translate mode.
+        divider = is_translate and (now - self._last_commit_mono) > 1.5
         self._last_commit_mono = now
-        speaker = self.conv["turn"] if self.app_mode == "translate" else "them"
+        speaker = self.conv["turn"] if is_translate else ""
         self.timing.update(commit_ms=commit_ms, e2e_ms=commit_ms)
         # Emit the FAST line immediately — captions never wait on refine/LLM.
         self._emit({
@@ -389,11 +402,13 @@ class LiveController:
                 original = original_fast
             if cid != self._refine_gen:  # became stale during the slower re-transcribe
                 return
-        # English via whisper translate (xx->en) — no LLM on this path
+        # Tagalog exact-word post-fixes (tested replacements from the live log)
+        if lang == "tl":
+            original = _apply_tl_fixes(original)
+        # English (xx->en) is needed ONLY in Translate mode (captions/listen show the
+        # spoken transcript only — no translation).
         tr_ms = None
-        if lang == "en":
-            watch_en = original
-        else:
+        if ctx["app_mode"] == "translate" and lang != "en":
             tt = time.perf_counter()
             try:
                 en_raw, en_conf = self._fast_tr(lang)._run(samples, "translate", lang, 1)
@@ -401,6 +416,8 @@ class LiveController:
             except Exception:
                 watch_en = original
             tr_ms = int((time.perf_counter() - tt) * 1000)
+        else:
+            watch_en = original  # captions/ambient, or en: no translation
         primary, secondary = self._display_for(ctx, original, watch_en, lang)
         is_alert, matched, alert_title = self._check_alert(watch_en, original, ctx["announcements"])
         self._emit({
@@ -436,15 +453,9 @@ class LiveController:
             translated = llm.translate(src_en, their, model=config.LLM_DEFAULT) or src_en
             return ({"text": translated, "lang": their, "rtl": self._rtl(their)},
                     {"text": original, "lang": lang, "rtl": self._rtl(lang)})
-        read = ctx["read_lang"]
-        if lang == read:
-            shown = original
-        elif read == "en":
-            shown = watch_en
-        else:
-            shown = llm.translate(watch_en, read, model=config.LLM_DEFAULT) or watch_en
-        secondary = {"text": original, "lang": lang, "rtl": self._rtl(lang)} if lang != read else {}
-        return {"text": shown, "lang": read, "rtl": self._rtl(read)}, secondary
+        # Captions / Listen-for-me: show ONLY the spoken-language transcript. No
+        # translation line, no "Them", no speaker markers.
+        return {"text": original, "lang": lang, "rtl": self._rtl(lang)}, {}
 
     def _maybe_write_bench(self) -> None:
         now = time.time()
