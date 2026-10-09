@@ -15,3 +15,8 @@ Planning docs and brand kit were prepared before the build (disclosed in README)
 - `cli.py`: `serve · bench · net cut|restore|status · doctor · wipe`.
 - Tests: 20 passing (`uv run pytest -q`) — brand, localclient, netcut, no-audio-on-disk, daemon smoke/hub.
 - Pending for Fathi (device checks): record `tests/audio/*.wav` then run `earshot bench`; film Garmin + iPhone latency; run `cut-internet.ps1` from admin PowerShell; try both button maps. Numbers → `docs/bench.txt`.
+
+## P1 (pulled forward for the P0 confirm test)
+- Languages = English/Tagalog/Arabic: multilingual whisper `base` (auto-detect), caption bar shows original, Now Playing (watch/lock) shows English (task=translate). LLM default `qwen2.5:1.5b`. Downloaded whisper `small` (use if RTF allows).
+- `audio.py` RAM ring mic, `asr.py` multilingual transcriber, `live.py` controller; daemon `/live` dashboard shows every caption + detected language + events, with a Counter↔Live toggle. Smoke-tested: mic opens, model warms (loading→ready), events stream over WS, mode toggles, bytes-to-internet stays 0, /health responsive (43 ms/3 calls after offloading blocking calls to a threadpool).
+- `earshot serve --live` starts in live mode; default stays counter (for the latency film).
