@@ -107,6 +107,11 @@
     <button id="jump">Jump to live ↓</button>
     <div id="partial"></div>
     <div class="controls">
+      <div class="row2">
+        <input id="recallQ" placeholder="Recall: what was said about…"
+          style="flex:1;height:40px;border-radius:10px;border:1px solid rgba(169,184,156,.4);background:var(--fd);color:var(--beige);padding:0 12px;font-size:15px">
+        <button class="act" id="recallBtn">Ask</button>
+      </div>
       <div class="picker">Mode:
         <button class="chip" data-mode="ambient">Ambient</button>
         <button class="chip" data-mode="captions">Captions</button>
@@ -313,6 +318,17 @@
   function applyScale(){ stackEl.style.setProperty("--cap-scale", capScale.toFixed(2)); }
   document.getElementById("aMinus").onclick=function(){ capScale=Math.max(0.7, capScale-0.15); applyScale(); };
   document.getElementById("aPlus").onclick=function(){ capScale=Math.min(2.0, capScale+0.15); applyScale(); };
+  function doRecall(){
+    var q=document.getElementById("recallQ").value.trim(); if(!q) return;
+    fetch("/recall?q="+encodeURIComponent(q)).then(function(r){return r.json();}).then(function(r){
+      var card={_insight:true, time:"Recall: "+q, topics:[r.answer||""],
+        questions:(r.results||[]).map(function(x){return {who:new Date((x.ts||0)*1000).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}), what:x.text};}),
+        dates:[], tasks:[]};
+      lines.push(card); if(lines.length>60)lines=lines.slice(-60); renderStack();
+    }).catch(function(){});
+  }
+  document.getElementById("recallBtn").onclick=doRecall;
+  document.getElementById("recallQ").addEventListener("keydown", function(e){ if(e.key==="Enter") doRecall(); });
 
   async function requestWakeLock(){ try{ if("wakeLock" in navigator){ wakeLock=await navigator.wakeLock.request("screen"); } }catch(_){} }
   function diag(){

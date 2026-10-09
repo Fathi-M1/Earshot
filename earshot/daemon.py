@@ -268,6 +268,15 @@ def _live_page(token: str) -> str:
     </div>
     <div>
       <div class="card">
+        <h2>Recall — search today's transcript</h2>
+        <div style="display:flex;gap:8px">
+          <input id="recallQ" placeholder="what did they say about the deadline?"
+            style="flex:1;height:36px;border-radius:8px;border:1px solid rgba(169,184,156,.4);background:var(--fd);color:var(--beige);padding:0 10px;font-size:14px">
+          <button class="cv" id="recallBtn" style="height:36px">Search</button>
+        </div>
+        <div id="recallOut" style="margin-top:10px"></div>
+      </div>
+      <div class="card" style="margin-top:16px">
         <h2>Now playing (sent to watch / lock screen)</h2>
         <div class="np"><div class="big" id="npTitle">—</div><div class="sub" id="npArtist"></div></div>
       </div>
@@ -420,6 +429,24 @@ def _live_page(token: str) -> str:
   fetch('/conv').then(r=>r.json()).then(c=>{{ curConv={{their:c.their,mine:c.mine,turn:c.turn}}; curMuted=!!c.muted; curMode=c.app_mode||curMode; curRead=c.read_lang||curRead; syncConv(); }}).catch(()=>{{}});
   fetch('/insights').then(r=>r.json()).then(j=>{{ window._insights=j.insights||[]; renderInsights(); }}).catch(()=>{{}});
 
+  async function doRecall(){{
+    const q = document.getElementById('recallQ').value.trim();
+    const out = document.getElementById('recallOut');
+    if (!q) return;
+    out.innerHTML = '<div class="kv"><span class="k">searching…</span></div>';
+    try {{
+      const r = await (await fetch('/recall?q='+encodeURIComponent(q))).json();
+      let h = '<div style="font-size:15px;font-weight:600;margin-bottom:8px">'+esc(r.answer||'')+'</div>';
+      (r.results||[]).forEach(res=>{{
+        const t = new Date((res.ts||0)*1000); const hhmm = String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');
+        h += '<div class="row" style="cursor:pointer" data-ts="'+(res.ts||0)+'"><div class="t">'+hhmm+'</div><div class="lang">'+(res.score||'')+'</div><div class="orig">'+esc(res.text)+'</div></div>';
+      }});
+      out.innerHTML = h || '<div class="kv"><span class="k">no results</span></div>';
+    }} catch(e) {{ out.innerHTML = '<div class="kv"><span class="k">error</span></div>'; }}
+  }}
+  document.getElementById('recallBtn').onclick = doRecall;
+  document.getElementById('recallQ').addEventListener('keydown', e=>{{ if(e.key==='Enter') doRecall(); }});
+
   async function poll(){{
     try {{
       const h = await (await fetch('/health')).json();
@@ -507,6 +534,12 @@ def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[Fa
     async def _insights() -> JSONResponse:
         return JSONResponse({"insights": controller.insights[-20:]})
 
+    async def _recall(request: Request) -> JSONResponse:
+        q = request.query_params.get("q", "").strip()
+        if not q:
+            return JSONResponse({"answer": "", "results": []})
+        return JSONResponse(await run_in_threadpool(controller.recall.answer, q))
+
     async def _catchup() -> JSONResponse:
         return JSONResponse(await run_in_threadpool(controller.catch_up))
 
@@ -523,6 +556,7 @@ def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[Fa
         app.add_api_route("/catchup", _catchup, methods=["POST"])
         app.add_api_route("/insight", _insight, methods=["POST"])
         app.add_api_route("/insights", _insights, methods=["GET"])
+        app.add_api_route("/recall", _recall, methods=["GET"])
         app.add_api_route("/mute", _mute, methods=["POST"])
         app.add_api_route("/unmute", _unmute, methods=["POST"])
 

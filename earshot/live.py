@@ -26,7 +26,7 @@ import time
 
 import numpy as np
 
-from . import alerts, captions, config, llm, voice
+from . import alerts, captions, config, llm, recall, voice
 from .asr import Transcriber, _clean
 from .audio import RingMic
 
@@ -83,6 +83,7 @@ class LiveController:
         self._alert_cooldown: dict[str, float] = {}
         self._last_commit_mono = 0.0
         self.insights: list[dict] = []   # ambient INSIGHT CARDS
+        self.recall = recall.Recall()    # semantic search over today's lines
 
     def attach_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
@@ -312,6 +313,8 @@ class LiveController:
                          *, announcements: bool = False, divider: bool = False) -> None:
         self._last_commit_mono = now
         self.history.append((time.time(), watch_en))
+        # index for recall (embedding is a loopback Ollama call — do it off-thread)
+        threading.Thread(target=self.recall.add_line, args=(watch_en,), daemon=True).start()
         is_alert, matched, alert_title = self._check_alert(watch_en, original, announcements)
         self._emit({
             "type": "caption", "committed": True, "speaker": speaker,
