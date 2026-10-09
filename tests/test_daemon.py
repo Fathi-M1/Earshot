@@ -119,6 +119,23 @@ def test_conv_endpoint_sets_and_gets():
     assert g["their"] == "es" and g["turn"] == "me" and "muted" in g
 
 
+def test_appmode_endpoint():
+    hub = daemon.Hub()
+    controller = daemon.LiveController(hub)
+    dash, _ = daemon.build_apps(hub, controller)
+    client = TestClient(dash)
+    r = client.post("/appmode", json={"app_mode": "captions", "read_lang": "ar"})
+    assert r.json() == {"app_mode": "captions", "read_lang": "ar"}
+    assert client.get("/conv").json()["app_mode"] == "captions"
+
+
+def test_question_to_me_detection():
+    from earshot.live import _is_question_to_me
+    assert _is_question_to_me("Fathi, can you answer the question?")
+    assert _is_question_to_me("where are you going?")
+    assert not _is_question_to_me("the sky is blue")
+
+
 def test_mute_noop_when_not_live():
     hub = daemon.Hub()
     controller = daemon.LiveController(hub)

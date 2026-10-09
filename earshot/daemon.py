@@ -272,7 +272,23 @@ def _live_page(token: str) -> str:
         <div class="np"><div class="big" id="npTitle">—</div><div class="sub" id="npArtist"></div></div>
       </div>
       <div class="card" style="margin-top:16px">
-        <h2>Conversation</h2>
+        <h2>Mode</h2>
+        <div id="modeChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+          <button class="cv" data-mode="ambient">Ambient</button><button class="cv" data-mode="captions">Captions</button>
+          <button class="cv" data-mode="translate">Translate</button>
+        </div>
+        <div id="readWrap"><div style="font:400 11px/1 ui-monospace,monospace;color:var(--sage);text-transform:uppercase;margin-bottom:6px">I read</div>
+        <div id="readChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+          <button class="cv" data-read="en">English</button><button class="cv" data-read="tl">Tagalog</button>
+          <button class="cv" data-read="es">Spanish</button><button class="cv" data-read="ar">Arabic</button>
+        </div></div>
+      </div>
+      <div class="card" style="margin-top:16px" id="insightCard">
+        <h2>Insight cards <button class="cv" id="insightBtn" style="float:right;height:28px">Insight now</button></h2>
+        <div id="insights" style="display:flex;flex-direction:column;gap:10px;max-height:40vh;overflow:auto"></div>
+      </div>
+      <div class="card" style="margin-top:16px" id="convCard">
+        <h2>Conversation (Translate)</h2>
         <div style="font:400 11px/1 ui-monospace,monospace;color:var(--sage);text-transform:uppercase;margin-bottom:6px">They speak</div>
         <div id="theirChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
           <button class="cv" data-their="ar">Arabic</button><button class="cv" data-their="tl">Tagalog</button>
@@ -342,6 +358,10 @@ def _live_page(token: str) -> str:
              (match?` <div class="eng">⬥ ${{(m.matched||[]).join(', ')}}</div>`:'')+`</div>`, match);
     }} else if (m.type === 'conv'){{
       curConv = {{their:m.their, mine:m.mine, turn:m.turn}}; syncConv();
+    }} else if (m.type === 'appmode'){{
+      curMode = m.app_mode; curRead = m.read_lang; syncConv();
+    }} else if (m.type === 'insight'){{
+      window._insights = (window._insights||[]); window._insights.push(m); renderInsights();
     }} else if (m.type === 'event'){{
       addRow(`<div class="t">${{hhmmss(m.ts)}}</div><div class="lang">·</div>`+
              `<div class="orig">[${{m.kind}}] ${{m.detail||''}}</div>`, 'evt');
@@ -361,21 +381,44 @@ def _live_page(token: str) -> str:
   document.getElementById('liveBtn').onclick = () => setMode('live');
   document.getElementById('counterBtn').onclick = () => setMode('counter');
 
-  // conversation controls
-  let curConv = {{their:'ar', mine:'en', turn:'them'}}, curMuted=false;
+  // conversation + mode controls
+  let curConv = {{their:'ar', mine:'en', turn:'them'}}, curMuted=false, curMode='ambient', curRead='en';
   function post(path, body){{ return fetch(path, {{method:'POST', headers:{{'content-type':'application/json'}}, body:JSON.stringify(body||{{}})}}); }}
+  function esc(s){{ return (s||'').replace(/[&<>]/g,c=>({{'&':'&amp;','<':'&lt;','>':'&gt;'}}[c])); }}
   function syncConv(){{
+    document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('on', b.dataset.mode===curMode));
+    document.querySelectorAll('[data-read]').forEach(b=>b.classList.toggle('on', b.dataset.read===curRead));
     document.querySelectorAll('[data-their]').forEach(b=>b.classList.toggle('on', b.dataset.their===curConv.their));
     document.querySelectorAll('[data-mine]').forEach(b=>b.classList.toggle('on', b.dataset.mine===curConv.mine));
     document.querySelectorAll('[data-turn]').forEach(b=>b.classList.toggle('on', b.dataset.turn===curConv.turn));
     const mb=document.getElementById('muteBtn'); mb.classList.toggle('on',curMuted); mb.textContent=curMuted?'Muted':'Mute';
+    document.getElementById('convCard').style.display = (curMode==='translate')?'block':'none';
+    document.getElementById('readWrap').style.display = (curMode==='translate')?'none':'block';
+    document.getElementById('insightCard').style.display = (curMode==='ambient')?'block':'none';
   }}
+  function renderInsights(){{
+    const el=document.getElementById('insights'); el.innerHTML='';
+    (window._insights||[]).slice(-10).reverse().forEach(c=>{{
+      const d=document.createElement('div'); d.className='card'; d.style.padding='12px';
+      const li=a=>(a&&a.length)?'<ul style="margin:2px 0 8px;padding-left:18px">'+a.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>':'<div class="kv"><span class="k">—</span></div>';
+      d.innerHTML='<h2>'+esc(c.time||'')+'</h2>'+
+        '<div class="kv"><span class="k">topics</span></div>'+li((c.topics||[]).map(esc))+
+        '<div class="kv"><span class="k">questions</span></div>'+li((c.questions||[]).map(q=>esc(q.who)+': '+esc(q.what)))+
+        '<div class="kv"><span class="k">dates</span></div>'+li((c.dates||[]).map(x=>esc(x.what)+' — '+esc(x.when)))+
+        '<div class="kv"><span class="k">tasks</span></div>'+li((c.tasks||[]).map(esc));
+      el.appendChild(d);
+    }});
+  }}
+  document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{{ post('/appmode',{{app_mode:b.dataset.mode}}); curMode=b.dataset.mode; syncConv(); }});
+  document.querySelectorAll('[data-read]').forEach(b=>b.onclick=()=>{{ post('/appmode',{{read_lang:b.dataset.read}}); curRead=b.dataset.read; syncConv(); }});
   document.querySelectorAll('[data-their]').forEach(b=>b.onclick=()=>{{ post('/conv',{{their:b.dataset.their}}); curConv.their=b.dataset.their; syncConv(); }});
   document.querySelectorAll('[data-mine]').forEach(b=>b.onclick=()=>{{ post('/conv',{{mine:b.dataset.mine}}); curConv.mine=b.dataset.mine; syncConv(); }});
   document.querySelectorAll('[data-turn]').forEach(b=>b.onclick=()=>{{ post('/conv',{{turn:b.dataset.turn}}); curConv.turn=b.dataset.turn; syncConv(); }});
   document.getElementById('catchBtn').onclick=()=>post('/catchup');
+  document.getElementById('insightBtn').onclick=()=>post('/insight');
   document.getElementById('muteBtn').onclick=()=>post(curMuted?'/unmute':'/mute');
-  fetch('/conv').then(r=>r.json()).then(c=>{{ curConv={{their:c.their,mine:c.mine,turn:c.turn}}; curMuted=!!c.muted; syncConv(); }}).catch(()=>{{}});
+  fetch('/conv').then(r=>r.json()).then(c=>{{ curConv={{their:c.their,mine:c.mine,turn:c.turn}}; curMuted=!!c.muted; curMode=c.app_mode||curMode; curRead=c.read_lang||curRead; syncConv(); }}).catch(()=>{{}});
+  fetch('/insights').then(r=>r.json()).then(j=>{{ window._insights=j.insights||[]; renderInsights(); }}).catch(()=>{{}});
 
   async function poll(){{
     try {{
@@ -449,7 +492,20 @@ def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[Fa
         )
 
     async def _get_conv() -> JSONResponse:
-        return JSONResponse({**controller.conv, "muted": controller.muted, "state": controller.state})
+        return JSONResponse({
+            **controller.conv, "muted": controller.muted, "state": controller.state,
+            "app_mode": controller.app_mode, "read_lang": controller.read_lang,
+        })
+
+    async def _appmode(request: Request) -> JSONResponse:
+        body = await request.json()
+        return JSONResponse(controller.set_app_mode(body.get("app_mode"), body.get("read_lang")))
+
+    async def _insight() -> JSONResponse:
+        return JSONResponse(await run_in_threadpool(controller.make_insight))
+
+    async def _insights() -> JSONResponse:
+        return JSONResponse({"insights": controller.insights[-20:]})
 
     async def _catchup() -> JSONResponse:
         return JSONResponse(await run_in_threadpool(controller.catch_up))
@@ -463,7 +519,10 @@ def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[Fa
     for app in (dash, phone):
         app.add_api_route("/conv", _conv, methods=["POST"])
         app.add_api_route("/conv", _get_conv, methods=["GET"])
+        app.add_api_route("/appmode", _appmode, methods=["POST"])
         app.add_api_route("/catchup", _catchup, methods=["POST"])
+        app.add_api_route("/insight", _insight, methods=["POST"])
+        app.add_api_route("/insights", _insights, methods=["GET"])
         app.add_api_route("/mute", _mute, methods=["POST"])
         app.add_api_route("/unmute", _unmute, methods=["POST"])
 
@@ -606,6 +665,14 @@ async def _tick_loop(hub: Hub, controller: LiveController) -> None:
         await asyncio.sleep(TICK_SECONDS)
 
 
+async def _insight_timer(controller: LiveController) -> None:
+    """Every 10 min in AMBIENT live mode, auto-create an insight card."""
+    while True:
+        await asyncio.sleep(600)
+        if controller.mode == "live" and controller.app_mode == "ambient" and not controller.muted:
+            await run_in_threadpool(controller.make_insight)
+
+
 async def _proof_refresher(hub: Hub) -> None:
     """Refresh the privacy proof (psutil is slow) off the request path."""
     from . import privacy
@@ -634,6 +701,7 @@ async def _serve_async(hub: Hub, controller: LiveController, *, tick: bool, star
         coros.append(_tick_loop(hub, controller))
     coros.append(controller.watch_pacer())  # drives the watch in live mode
     coros.append(_proof_refresher(hub))      # privacy counters off the request path
+    coros.append(_insight_timer(controller)) # 10-min ambient insight cards
     await asyncio.gather(*coros)
 
 

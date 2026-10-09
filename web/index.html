@@ -51,7 +51,14 @@
   .line .who{ font:400 11px/1 ui-monospace,monospace; letter-spacing:.1em; text-transform:uppercase; color:var(--sage); }
   .line.them .who{ color:var(--glow); } .line.me .who{ color:var(--fern); }
   .line.alert .who{ color:var(--needs); }
-  .line .primary{ font-size:clamp(28px,6.6vw,38px); line-height:1.14; font-weight:700; color:var(--beige); }
+  .line .primary{ font-size:calc(clamp(28px,6.6vw,38px) * var(--cap-scale,1)); line-height:1.14; font-weight:700; color:var(--beige); }
+  .divider{ text-align:center; color:var(--moss); font:400 11px/1 ui-monospace,monospace;
+            letter-spacing:.15em; text-transform:uppercase; padding:4px 0; opacity:.7; }
+  .insight{ border:1px solid rgba(169,184,156,.35); border-radius:12px; padding:12px 14px; background:var(--forest); }
+  .insight h3{ margin:0 0 6px; font:400 11px/1 ui-monospace,monospace; letter-spacing:.1em;
+               text-transform:uppercase; color:var(--fern); }
+  .insight .k{ font:400 11px/1 ui-monospace,monospace; color:var(--sage); text-transform:uppercase; }
+  .insight ul{ margin:2px 0 8px; padding-left:18px; font-size:14px; }
   .line.alert .primary{ color:var(--needs); }
   .line .secondary{ font-size:clamp(14px,3.4vw,18px); line-height:1.25; color:var(--sage); }
   #partial{ flex:0 0 auto; padding:0 16px 6px; font-size:clamp(18px,4.4vw,24px);
@@ -100,24 +107,38 @@
     <button id="jump">Jump to live ↓</button>
     <div id="partial"></div>
     <div class="controls">
-      <div class="picker">They speak:
+      <div class="picker">Mode:
+        <button class="chip" data-mode="ambient">Ambient</button>
+        <button class="chip" data-mode="captions">Captions</button>
+        <button class="chip" data-mode="translate">Translate</button>
+      </div>
+      <div class="picker" id="readRow">I read:
+        <button class="chip" data-read="en">English</button>
+        <button class="chip" data-read="tl">Tagalog</button>
+        <button class="chip" data-read="es">Spanish</button>
+        <button class="chip" data-read="ar">Arabic</button>
+        <button class="chip" id="aMinus" style="margin-left:auto">A-</button>
+        <button class="chip" id="aPlus">A+</button>
+      </div>
+      <div class="picker" id="theirRow">They speak:
         <button class="chip" data-their="ar">Arabic</button>
         <button class="chip" data-their="tl">Tagalog</button>
         <button class="chip" data-their="es">Spanish</button>
         <button class="chip" data-their="en">English</button>
       </div>
-      <div class="picker">I speak:
+      <div class="picker" id="mineRow">I speak:
         <button class="chip" data-mine="en">English</button>
         <button class="chip" data-mine="tl">Tagalog</button>
         <button class="chip" data-mine="es">Spanish</button>
         <button class="chip" data-mine="ar">Arabic</button>
       </div>
-      <div class="row2">
+      <div class="row2" id="turnRow">
         <button class="turn" id="turnThem" data-turn="them">Them</button>
         <button class="turn" id="turnMe" data-turn="me">Me</button>
       </div>
       <div class="row2">
         <button class="act" id="catchBtn">Catch me up</button>
+        <button class="act" id="insightBtn">Insight</button>
         <button class="act mute" id="muteBtn">Mute</button>
       </div>
     </div>
@@ -133,6 +154,7 @@
   var display = "Earshot";
   var audio=null, ws=null, backoff=500, lastState="LISTENING", wakeLock=null, stick=true, muted=false;
   var conv = {their:"ar", mine:"en", turn:"them"};
+  var appMode = "ambient", readLang = "en", capScale = 1;
   var lines=[];
 
   var cfgReady = fetch("/config").then(function(r){return r.json();}).then(function(c){
@@ -159,15 +181,28 @@
     document.getElementById("jump").classList.remove("on"); }
   document.getElementById("jump").onclick = scrollToLive;
 
+  function esc(s){ return (s||"").replace(/[&<>]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c]; }); }
+  function insightHtml(c){
+    function list(items){ return items && items.length ? "<ul>"+items.map(function(x){return "<li>"+esc(x)+"</li>";}).join("")+"</ul>" : "<div class='k'>—</div>"; }
+    var q = (c.questions||[]).map(function(x){return esc(x.who)+": "+esc(x.what);});
+    var d = (c.dates||[]).map(function(x){return esc(x.what)+" — "+esc(x.when);});
+    return '<div class="insight"><h3>Insight · '+esc(c.time||"")+'</h3>'+
+      '<div class="k">Topics</div>'+list((c.topics||[]).map(esc))+
+      '<div class="k">Questions</div>'+list(q)+
+      '<div class="k">Dates</div>'+list(d)+
+      '<div class="k">Tasks</div>'+list((c.tasks||[]).map(esc))+'</div>';
+  }
   function renderStack(){
     stackEl.innerHTML = "";
     lines.slice(-40).forEach(function(ln){
+      if (ln._insight){ var ic=document.createElement("div"); ic.innerHTML=insightHtml(ln); stackEl.appendChild(ic.firstChild); return; }
+      if (ln.divider){ var dv=document.createElement("div"); dv.className="divider"; dv.textContent="— speaker changed —"; stackEl.appendChild(dv); }
       var div = document.createElement("div");
       div.className = "line " + (ln.speaker||"them") + (ln.alert?" alert":"");
       var p = ln.primary||{}, s = ln.secondary||{};
       var who = (ln.speaker==="me"?"You":"Them") + (ln.alert?" · ⬥ alert":"");
-      var pr = '<div class="primary"'+(p.rtl?' dir="rtl" lang="'+(p.lang||'')+'"':'')+'>'+(p.text||"")+'</div>';
-      var se = s.text ? '<div class="secondary"'+(s.rtl?' dir="rtl" lang="'+(s.lang||'')+'"':'')+'>'+s.text+'</div>' : '';
+      var pr = '<div class="primary"'+(p.rtl?' dir="rtl" lang="'+(p.lang||'')+'"':'')+'>'+esc(p.text)+'</div>';
+      var se = s.text ? '<div class="secondary"'+(s.rtl?' dir="rtl" lang="'+(s.lang||'')+'"':'')+'>'+esc(s.text)+'</div>' : '';
       div.innerHTML = '<div class="who">'+who+'</div>'+pr+se;
       stackEl.appendChild(div);
     });
@@ -193,6 +228,9 @@
       document.getElementById("muteBtn").classList.toggle("on", muted);
       document.getElementById("muteBtn").textContent = muted ? "Muted" : "Mute"; return; }
     if (m.type==="conv"){ conv={their:m.their,mine:m.mine,turn:m.turn}; syncControls(); return; }
+    if (m.type==="appmode"){ appMode=m.app_mode; readLang=m.read_lang; syncControls(); return; }
+    if (m.type==="insight"){ var c={_insight:true}; for(var k in m)c[k]=m[k]; lines.push(c);
+      if(lines.length>60)lines=lines.slice(-60); renderStack(); return; }
     if (m.type==="caption"){
       if (!m.committed){ document.getElementById("partial").textContent =
         (m.lang?"["+m.lang+"] ":"")+"… "+(m.original||""); return; }
@@ -245,20 +283,36 @@
   // ---- conversation controls ----
   function post(path, body){ return fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body||{})}); }
   function fetchConv(){ fetch("/conv").then(function(r){return r.json();}).then(function(c){
-    conv={their:c.their,mine:c.mine,turn:c.turn}; muted=!!c.muted; syncControls(); }).catch(function(){}); }
+    conv={their:c.their,mine:c.mine,turn:c.turn}; muted=!!c.muted;
+    appMode=c.app_mode||appMode; readLang=c.read_lang||readLang; syncControls(); }).catch(function(){}); }
   function syncControls(){
+    document.querySelectorAll("[data-mode]").forEach(function(b){ b.classList.toggle("on", b.dataset.mode===appMode); });
+    document.querySelectorAll("[data-read]").forEach(function(b){ b.classList.toggle("on", b.dataset.read===readLang); });
     document.querySelectorAll("[data-their]").forEach(function(b){ b.classList.toggle("on", b.dataset.their===conv.their); });
     document.querySelectorAll("[data-mine]").forEach(function(b){ b.classList.toggle("on", b.dataset.mine===conv.mine); });
     document.getElementById("turnThem").classList.toggle("on", conv.turn==="them");
     document.getElementById("turnMe").classList.toggle("on", conv.turn==="me");
     var mb=document.getElementById("muteBtn"); mb.classList.toggle("on",muted); mb.textContent=muted?"Muted":"Mute";
+    // show/hide controls per mode
+    var translate = (appMode==="translate");
+    document.getElementById("theirRow").style.display = translate?"flex":"none";
+    document.getElementById("mineRow").style.display = translate?"flex":"none";
+    document.getElementById("turnRow").style.display = translate?"flex":"none";
+    document.getElementById("readRow").style.display = translate?"none":"flex";
+    document.getElementById("insightBtn").style.display = (appMode==="ambient")?"block":"none";
   }
+  document.querySelectorAll("[data-mode]").forEach(function(b){ b.onclick=function(){ post("/appmode",{app_mode:b.dataset.mode}); appMode=b.dataset.mode; syncControls(); }; });
+  document.querySelectorAll("[data-read]").forEach(function(b){ b.onclick=function(){ post("/appmode",{read_lang:b.dataset.read}); readLang=b.dataset.read; syncControls(); }; });
   document.querySelectorAll("[data-their]").forEach(function(b){ b.onclick=function(){ post("/conv",{their:b.dataset.their}); conv.their=b.dataset.their; syncControls(); }; });
   document.querySelectorAll("[data-mine]").forEach(function(b){ b.onclick=function(){ post("/conv",{mine:b.dataset.mine}); conv.mine=b.dataset.mine; syncControls(); }; });
   document.getElementById("turnThem").onclick=function(){ post("/conv",{turn:"them"}); conv.turn="them"; syncControls(); };
   document.getElementById("turnMe").onclick=function(){ post("/conv",{turn:"me"}); conv.turn="me"; syncControls(); };
   document.getElementById("catchBtn").onclick=function(){ post("/catchup"); };
+  document.getElementById("insightBtn").onclick=function(){ post("/insight"); };
   document.getElementById("muteBtn").onclick=function(){ post(muted?"/unmute":"/mute"); };
+  function applyScale(){ stackEl.style.setProperty("--cap-scale", capScale.toFixed(2)); }
+  document.getElementById("aMinus").onclick=function(){ capScale=Math.max(0.7, capScale-0.15); applyScale(); };
+  document.getElementById("aPlus").onclick=function(){ capScale=Math.min(2.0, capScale+0.15); applyScale(); };
 
   async function requestWakeLock(){ try{ if("wakeLock" in navigator){ wakeLock=await navigator.wakeLock.request("screen"); } }catch(_){} }
   function diag(){

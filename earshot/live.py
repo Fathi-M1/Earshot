@@ -40,6 +40,19 @@ def _looks_tagalog(text: str) -> bool:
     return len(words & _TAGALOG_MARKERS) >= 2
 
 
+_QUESTION_WORDS = ("what", "where", "when", "who", "why", "how", "did", "do", "are", "is", "can", "could", "will")
+
+
+def _is_question_to_me(text: str) -> bool:
+    """Heuristic: a question that mentions the listener's name or 'you'."""
+    t = text.strip().lower()
+    if "?" not in t and not t.startswith(_QUESTION_WORDS):
+        return False
+    names = [n.lower() for n in config.ALERT_KEYWORDS if n.istitle() or n == "Fathi"]
+    mentions_me = ("you" in t.split()) or any(n in t for n in ["fathi"] + names)
+    return mentions_me
+
+
 class LiveController:
     def __init__(self, hub):
         self.hub = hub
@@ -68,9 +81,20 @@ class LiveController:
         # committed transcript history (English) for catch-up; alert cooldowns
         self.history: collections.deque[tuple[float, str]] = collections.deque(maxlen=400)
         self._alert_cooldown: dict[str, float] = {}
+        self._last_commit_mono = 0.0
+        self.insights: list[dict] = []   # ambient INSIGHT CARDS
 
     def attach_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
+
+    # ---- app mode (ambient | captions | translate) + reading language ----
+    def set_app_mode(self, app_mode: str | None = None, read_lang: str | None = None) -> dict:
+        if app_mode in ("ambient", "captions", "translate"):
+            self.app_mode = app_mode
+        if read_lang in config.ASR_LANGS:
+            self.read_lang = read_lang
+        self._emit({"type": "appmode", "app_mode": self.app_mode, "read_lang": self.read_lang, "ts": _ms()})
+        return {"app_mode": self.app_mode, "read_lang": self.read_lang}
 
     # ---- conversation settings ----
     def set_conv(self, their: str | None = None, mine: str | None = None, turn: str | None = None) -> dict:
@@ -183,12 +207,14 @@ class LiveController:
                     active = True
                     utt_start = now
                     last_partial = 0.0
-                    utt_lang = self._turn_asr_lang()  # explicit, no detection
+                    utt_lang = self._asr_lang_for_mode()  # forced (translate) or None (detect)
                     last_partial_text = ""
-                # periodic partial (transcribe in the forced turn language)
+                # periodic partial
                 if now - last_partial >= config.PARTIAL_INTERVAL_S:
                     dur = min(now - utt_start + 0.3, config.MAX_UTTERANCE_S + 1)
                     samples = self._mic.snapshot(dur)
+                    if utt_lang is None:  # ambient/captions: detect once, then reuse
+                        utt_lang, _ = self._transcriber.detect(samples)
                     try:
                         raw, conf = self._transcriber._run(
                             samples, "transcribe", utt_lang, config.ASR_BEAM_PARTIAL
@@ -214,8 +240,11 @@ class LiveController:
             return active, utt_start, last_partial, last_speech, utt_lang, last_partial_text
 
     def _turn_asr_lang(self) -> str:
-        """The language whisper is forced to for the current turn (no detection)."""
         return self.conv["their"] if self.conv["turn"] == "them" else self.conv["mine"]
+
+    def _asr_lang_for_mode(self) -> str | None:
+        """Forced language (TRANSLATE turn) or None to auto-detect (AMBIENT/CAPTIONS)."""
+        return self._turn_asr_lang() if self.app_mode == "translate" else None
 
     def _rtl(self, lang: str) -> bool:
         return lang in config.RTL_LANGS
@@ -225,45 +254,71 @@ class LiveController:
             return
         dur = min(now - utt_start + 0.5, config.MAX_UTTERANCE_S + 1)
         samples = self._mic.snapshot(dur)
-        turn = self.conv["turn"]
-        their, mine = self.conv["their"], self.conv["mine"]
-        beam = config.ASR_BEAM_COMMIT
         try:
-            if turn == "them":
-                original, conf = self._transcriber._run(samples, "transcribe", their, beam)
-                original = _clean(original, conf)
-                if not original:
-                    return
-                english = self._to_english(samples, their, original, beam)
-                primary = {"text": english, "lang": "en", "rtl": False}
-                secondary = {"text": original, "lang": their, "rtl": self._rtl(their)}
-                watch_en = english
-            else:  # my turn: transcribe my language, translate -> their language (big)
-                original, conf = self._transcriber._run(samples, "transcribe", mine, beam)
-                original = _clean(original, conf)
-                if not original:
-                    return
-                translated = llm.translate(original, their, model=config.LLM_HEAVY) or original
-                primary = {"text": translated, "lang": their, "rtl": self._rtl(their)}
-                secondary = {"text": original, "lang": mine, "rtl": self._rtl(mine)}
-                watch_en = original if mine == "en" else self._to_english(samples, mine, original, beam)
+            if self.app_mode == "translate":
+                self._commit_translate(samples, now)
+            else:  # ambient | captions
+                self._commit_listen(samples, utt_lang, now, announcements=(self.app_mode == "ambient"))
         except Exception as exc:
             self._emit({"type": "event", "kind": "asr_error", "detail": str(exc), "ts": _ms()})
+
+    def _commit_translate(self, samples, now: float) -> None:
+        turn, their, mine = self.conv["turn"], self.conv["their"], self.conv["mine"]
+        beam = config.ASR_BEAM_COMMIT
+        if turn == "them":
+            original, conf = self._transcriber._run(samples, "transcribe", their, beam)
+            original = _clean(original, conf)
+            if not original:
+                return
+            english = self._to_english(samples, their, original, beam)
+            primary = {"text": english, "lang": "en", "rtl": False}
+            secondary = {"text": original, "lang": their, "rtl": self._rtl(their)}
+            watch_en = english
+        else:  # my turn: transcribe my language, translate -> their language (big)
+            original, conf = self._transcriber._run(samples, "transcribe", mine, beam)
+            original = _clean(original, conf)
+            if not original:
+                return
+            translated = llm.translate(original, their, model=config.LLM_HEAVY) or original
+            primary = {"text": translated, "lang": their, "rtl": self._rtl(their)}
+            secondary = {"text": original, "lang": mine, "rtl": self._rtl(mine)}
+            watch_en = original if mine == "en" else self._to_english(samples, mine, original, beam)
+        self._publish_caption(turn, original, watch_en, self._turn_asr_lang(), primary, secondary, now)
+
+    def _commit_listen(self, samples, lang: str | None, now: float, *, announcements: bool) -> None:
+        beam = config.ASR_BEAM_COMMIT
+        if lang is None:
+            lang, _ = self._transcriber.detect(samples)
+        original, conf = self._transcriber._run(samples, "transcribe", lang, beam)
+        original = _clean(original, conf)
+        if not original:
             return
+        read = self.read_lang
+        watch_en = original if lang == "en" else self._to_english(samples, lang, original, beam)
+        if lang == read:
+            shown = original
+        elif read == "en":
+            shown = watch_en
+        else:
+            shown = llm.translate(original, read, model=config.LLM_HEAVY) or watch_en
+        primary = {"text": shown, "lang": read, "rtl": self._rtl(read)}
+        secondary = ({"text": original, "lang": lang, "rtl": self._rtl(lang)} if lang != read else {})
+        # "speaker changed" divider when the pause before this line was long.
+        divider = (now - self._last_commit_mono) > 1.5
+        self._publish_caption("them", original, watch_en, lang, primary, secondary, now,
+                              announcements=announcements, divider=divider)
 
-        # record English history for catch-up
+    def _publish_caption(self, speaker, original, watch_en, lang, primary, secondary, now,
+                         *, announcements: bool = False, divider: bool = False) -> None:
+        self._last_commit_mono = now
         self.history.append((time.time(), watch_en))
-
-        # alerts: fuzzy keyword hit -> cooldown -> optional LLM intent confirm
-        is_alert, matched, alert_title = self._check_alert(watch_en, original)
-
+        is_alert, matched, alert_title = self._check_alert(watch_en, original, announcements)
         self._emit({
-            "type": "caption", "committed": True, "speaker": turn,
-            "original": original, "english": watch_en, "lang": self._turn_asr_lang(),
+            "type": "caption", "committed": True, "speaker": speaker,
+            "original": original, "english": watch_en, "lang": lang,
             "primary": primary, "secondary": secondary,
-            "matched": matched, "alert": is_alert, "ts": _ms(),
+            "matched": matched, "alert": is_alert, "divider": divider, "ts": _ms(),
         })
-        # Watch: rolling English chunks; an alert overrides for 8 s + chime.
         for chunk in captions.chunk_for_watch(watch_en):
             self.watch_queue.append(chunk)
         if is_alert:
@@ -273,21 +328,29 @@ class LiveController:
             self._emit({"type": "event", "kind": "alert", "detail": self.alert_title,
                         "matched": matched, "ts": _ms()})
 
-    def _check_alert(self, english: str, original: str) -> tuple[bool, list[str], str]:
-        hits = alerts.fuzzy_hits(f"{english} {original}")
-        if not hits:
+    def _check_alert(self, english: str, original: str, announcements: bool = False) -> tuple[bool, list[str], str]:
+        kws = list(config.ALERT_KEYWORDS)
+        if announcements:
+            kws += config.ANNOUNCEMENT_KEYWORDS
+        text = f"{english} {original}"
+        hits = alerts.fuzzy_hits(text, kws)
+        question = announcements and _is_question_to_me(english)
+        if not hits and not question:
             return False, [], ""
         now = time.monotonic()
+        key = (hits[0] if hits else "question?")
         fresh = [k for k in hits if now - self._alert_cooldown.get(k.lower(), -1e9) >= config.ALERT_COOLDOWN_S]
-        if not fresh:
-            return False, hits, ""  # all on cooldown
-        for k in fresh:
+        if not fresh and not (question and now - self._alert_cooldown.get("question?", -1e9) >= config.ALERT_COOLDOWN_S):
+            return False, hits, ""
+        for k in (fresh or [key]):
             self._alert_cooldown[k.lower()] = now
         if config.ALERT_USE_LLM:
             is_alert, title = alerts.intent_confirm(english)
         else:
             is_alert, title = True, english[:40]
-        return is_alert, hits, title
+        if question:
+            is_alert = True
+        return is_alert, (hits or ["question"]), title
 
     def _to_english(self, samples, lang: str, original: str, beam: int) -> str:
         """English for the watch. Whisper translate; for Tagalog, fall back to the
@@ -373,6 +436,49 @@ class LiveController:
                     "line1": summary["line1"], "line2": summary["line2"], "ts": _ms()})
         spoken = f"In the last five minutes. {summary['line1']}. {summary['line2']}"
         voice.speak(spoken)
+
+    # ---- insight cards (AMBIENT) ----
+    def make_insight(self, minutes: int = 10) -> dict:
+        cutoff = time.time() - minutes * 60
+        recent = [(ts, t) for (ts, t) in self.history if ts >= cutoff and t]
+        if not recent:
+            return {"ok": False, "reason": "nothing yet"}
+        transcript = " ".join(t for _ts, t in recent)[-4000:]
+        schema = {
+            "type": "object",
+            "properties": {
+                "topics": {"type": "array", "items": {"type": "string"}, "maxItems": 6},
+                "questions": {"type": "array", "items": {"type": "object",
+                    "properties": {"who": {"type": "string"}, "what": {"type": "string"}},
+                    "required": ["who", "what"]}, "maxItems": 6},
+                "dates": {"type": "array", "items": {"type": "object",
+                    "properties": {"what": {"type": "string"}, "when": {"type": "string"}},
+                    "required": ["what", "when"]}, "maxItems": 6},
+                "tasks": {"type": "array", "items": {"type": "string"}, "maxItems": 8},
+            },
+            "required": ["topics", "questions", "dates", "tasks"],
+        }
+        system = (
+            "From the transcript, extract: topics discussed; questions asked and who asked "
+            "(use 'someone' if unknown); dates/deadlines (what + when as said); and tasks/action "
+            "items. Use only facts in the transcript. Reply JSON only."
+        )
+        out = llm.chat_json(config.LLM_DEFAULT, system, transcript, schema, timeout=config.CATCHUP_TIMEOUT)
+        if not out:
+            return {"ok": False, "reason": "llm unavailable"}
+        card = {
+            "ok": True,
+            "ts": _ms(),
+            "window_min": minutes,
+            "time": time.strftime("%H:%M"),
+            "topics": out.get("topics", []),
+            "questions": out.get("questions", []),
+            "dates": out.get("dates", []),
+            "tasks": out.get("tasks", []),
+        }
+        self.insights.append(card)
+        self._emit({"type": "insight", **card})
+        return card
 
     # ---- watch pacer (runs on the event loop) ----
     async def watch_pacer(self) -> None:
