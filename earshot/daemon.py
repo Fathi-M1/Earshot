@@ -42,6 +42,58 @@ DASH_HOST, DASH_PORT = "127.0.0.1", 7777
 PHONE_HOST, PHONE_PORT = "0.0.0.0", 7778
 TICK_SECONDS = 2.0
 
+def lan_ip() -> str:
+    """Best-guess LAN IP for the phone URL: prefer the iPhone hotspot subnet."""
+    import socket
+
+    candidates: list[str] = []
+    try:
+        import psutil
+
+        for addrs in psutil.net_if_addrs().values():
+            for a in addrs:
+                if a.family == socket.AF_INET and not a.address.startswith("127."):
+                    candidates.append(a.address)
+    except Exception:
+        pass
+    for ip in candidates:
+        if ip.startswith("172.20.10."):  # iPhone Personal Hotspot
+            return ip
+    for ip in candidates:
+        if ip.startswith(("192.168.", "10.", "172.")):
+            return ip
+    # fallback: primary outbound interface (no packet actually sent)
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("10.255.255.255", 1))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
+
+
+def phone_url() -> str:
+    return f"http://{lan_ip()}:{PHONE_PORT}/"
+
+
+def qr_png(data: str, scale: int = 6) -> bytes:
+    import segno
+
+    buf = io.BytesIO()
+    segno.make(data, error="m").save(buf, kind="png", scale=scale, border=2,
+                                     dark="#12241A", light="#EEF1E8")
+    return buf.getvalue()
+
+
+def qr_terminal(data: str) -> str:
+    import segno
+
+    buf = io.StringIO()
+    segno.make(data, error="m").terminal(out=buf, border=2)
+    return buf.getvalue()
+
+
 def _silent_wav(seconds: float = 1.0, rate: int = 8000) -> bytes:
     """A finite silent mono WAV generated in RAM (no disk). Looped by the phone
     page to keep the iOS Media Session alive so the Garmin keeps mirroring."""
@@ -268,7 +320,14 @@ def _live_page(token: str) -> str:
       <div id="log"></div>
     </div>
     <div>
-      <div class="card">
+      <div class="card" style="display:flex;gap:16px;align-items:center">
+        <img src="/qr.png" alt="phone QR" style="width:120px;height:120px;border-radius:12px;background:var(--paper)">
+        <div><h2>Pair your phone</h2>
+          <div class="kv"><span class="k">Scan with iPhone camera, open in Safari, tap Start.</span></div>
+          <div class="kv"><span class="k" id="phoneUrl">—</span></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:16px">
         <h2>Recall — search today's transcript</h2>
         <div style="display:flex;gap:8px">
           <input id="recallQ" placeholder="what did they say about the deadline?"
@@ -478,6 +537,7 @@ def _live_page(token: str) -> str:
       document.getElementById('kConn').textContent = h.internet_connections;
       document.getElementById('kLocal').textContent = h.local_bytes_sent;
       document.getElementById('kCut').textContent = h.net_cut ? 'yes' : 'no';
+      if (h.phone_url) document.getElementById('phoneUrl').textContent = h.phone_url;
       document.getElementById('liveBtn').classList.toggle('on', h.mode==='live');
       document.getElementById('counterBtn').classList.toggle('on', h.mode==='counter');
     }} catch(_){{}}
@@ -514,6 +574,7 @@ def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[Fa
                 "local_bytes_sent": pr.get("local_bytes_sent", 0),  # loopback (Ollama)
                 "internet_connections": pr.get("internet_connections", 0),
                 "phone_token": hub.token,
+                "phone_url": phone_url(),
                 "mode": controller.mode,
                 "app_mode": controller.app_mode,
                 "net_cut": net_cut,
@@ -523,6 +584,10 @@ def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[Fa
     @dash.get("/proof")
     async def proof_endpoint() -> JSONResponse:
         return JSONResponse(hub.latest_proof or {})
+
+    @dash.get("/qr.png")
+    async def qr_endpoint() -> Response:
+        return Response(content=qr_png(phone_url()), media_type="image/png")
 
     @dash.post("/mode")
     async def set_mode(request: Request) -> JSONResponse:
@@ -791,9 +856,14 @@ def serve(*, tick: bool = True, start_live: bool = False) -> None:
     print(f"{display} daemon")
     print(f"  dashboard : http://{DASH_HOST}:{DASH_PORT}/        (counter page for the latency film)")
     print(f"  live log  : http://{DASH_HOST}:{DASH_PORT}/live    (captions + detected language + events)")
-    print(f"  phone     : http://<laptop-ip>:{PHONE_PORT}/?t={hub.token}")
-    print(f"  (phone token: {hub.token})")
+    url = phone_url()
+    print(f"  phone     : {url}   (scan the QR below on your iPhone)")
+    print(f"  (phone token auto; manual: {url}?t={hub.token})")
     print(f"  mode      : {'live (mic open)' if start_live else 'counter (film) — toggle on /live'}")
+    try:
+        print(qr_terminal(url))
+    except Exception:
+        pass
     try:
         asyncio.run(_serve_async(hub, controller, tick=tick, start_live=start_live))
     except KeyboardInterrupt:

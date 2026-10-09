@@ -119,6 +119,21 @@ def test_conv_endpoint_sets_and_gets():
     assert g["their"] == "es" and g["turn"] == "me" and "muted" in g
 
 
+def test_qr_and_lan_ip():
+    png = daemon.qr_png("http://172.20.10.3:7778/")
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"
+    ip = daemon.lan_ip()
+    assert isinstance(ip, str) and ip.count(".") == 3
+    assert daemon.phone_url().startswith("http://") and daemon.phone_url().endswith(":7778/")
+
+
+def test_qr_endpoint_served():
+    hub, dash, _ = _apps()
+    client = TestClient(dash)
+    r = client.get("/qr.png")
+    assert r.status_code == 200 and r.headers["content-type"] == "image/png"
+
+
 def test_appmode_endpoint():
     hub = daemon.Hub()
     controller = daemon.LiveController(hub)
