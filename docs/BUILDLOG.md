@@ -26,3 +26,10 @@ Planning docs and brand kit were prepared before the build (disclosed in README)
 - Phone is one installable PWA (manifest + Host Grotesk + icons from design/). Foreground = full-screen captions (last 3 lines, English under original, Wake Lock); background/locked = Media Session rolling ≤28-char chunks, alert override 8 s. On-page diagnostic reports standalone/tab + Media Session presence — **Fathi to verify iOS standalone Media Session; fall back to a Safari tab if it dies (I can't test iOS from here).**
 - Laptop caption bar `earshot bar` (frameless, topmost, draggable, Ctrl+Alt+C global toggle, WS-driven).
 - bench mirrors the live commit pass with per-language RTF incl. Spanish. 31 tests passing.
+
+## P2 — conversation mode, alerts, catch-up, mute
+- Conversation mode: explicit language pair + Them/Me turn, no auto-detection. Them = force whisper to their language, show original + English. Me = transcribe English, translate EN→their language with qwen2.5:3b (strict JSON via llm.py). Arabic RTL + Arabic font fallback. Tagalog forced + tl→en LLM fallback. Real translations verified (AR/ES good; TL weak on 3b — honest limit).
+- Phone layout fixed: scrollable full-height caption column, newest at bottom, auto-scroll pauses on scroll-up, Jump-to-live pill, safe-area insets. Controls on phone + /live (language pair, Them/Me, Catch up, Mute).
+- Alerts: rapidfuzz + metaphone keyword match → qwen2.5:1.5b intent confirm (4s, keyword stands on timeout), 20s cooldown; amber row + watch ⬥ title 8s + laptop chime.
+- Catch me up: qwen2.5:1.5b 2-line summary of last 5 min → local TTS (pyttsx3 SAPI; Piper hook) + extractive fallback; LLMs prewarmed on live start (fixes cold-load timeout).
+- Mute: Pause → mic closed instantly, MUTED on every surface. Persistent phone token + WS auth fix (token from /config, close code/reason shown). 42 tests passing.
