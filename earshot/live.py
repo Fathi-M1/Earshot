@@ -440,6 +440,16 @@ class LiveController:
         spoken = f"In the last five minutes. {summary['line1']}. {summary['line2']}"
         voice.speak(spoken)
 
+    # ---- session notes ----
+    def end_session(self) -> dict:
+        from . import notes
+
+        lines = [t for _ts, t in self.history]
+        result = notes.end_session(lines)
+        self._emit({"type": "event", "kind": "session_saved", "detail": result["session"],
+                    "events": result["events"], "ts": _ms()})
+        return result
+
     # ---- insight cards (AMBIENT) ----
     def make_insight(self, minutes: int = 10) -> dict:
         cutoff = time.time() - minutes * 60

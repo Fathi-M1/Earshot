@@ -19,6 +19,7 @@ import asyncio
 import contextlib
 import io
 import json
+import os
 import secrets
 import time
 import wave
@@ -296,6 +297,10 @@ def _live_page(token: str) -> str:
         <h2>Insight cards <button class="cv" id="insightBtn" style="float:right;height:28px">Insight now</button></h2>
         <div id="insights" style="display:flex;flex-direction:column;gap:10px;max-height:40vh;overflow:auto"></div>
       </div>
+      <div class="card" style="margin-top:16px">
+        <h2>Sessions <button class="cv" id="endBtn" style="float:right;height:28px">End session</button></h2>
+        <div id="sessions" style="display:flex;flex-direction:column;gap:6px"></div>
+      </div>
       <div class="card" style="margin-top:16px" id="convCard">
         <h2>Conversation (Translate)</h2>
         <div style="font:400 11px/1 ui-monospace,monospace;color:var(--sage);text-transform:uppercase;margin-bottom:6px">They speak</div>
@@ -447,6 +452,24 @@ def _live_page(token: str) -> str:
   document.getElementById('recallBtn').onclick = doRecall;
   document.getElementById('recallQ').addEventListener('keydown', e=>{{ if(e.key==='Enter') doRecall(); }});
 
+  function renderSessions(list){{
+    const el=document.getElementById('sessions'); el.innerHTML='';
+    (list||[]).forEach(s=>{{
+      const row=document.createElement('div'); row.className='kv';
+      row.innerHTML='<span class="k">'+esc(s.session)+'</span>'+
+        '<a href="/session/ics?session='+encodeURIComponent(s.session)+'" style="color:var(--beige)">Download .ics</a>';
+      el.appendChild(row);
+    }});
+  }}
+  async function refreshSessions(){{ try {{ const j=await (await fetch('/sessions')).json(); renderSessions(j.sessions); }} catch(_){{}} }}
+  document.getElementById('endBtn').onclick=async()=>{{
+    document.getElementById('endBtn').textContent='Saving…';
+    try {{ const r=await (await fetch('/session/end',{{method:'POST'}})).json();
+      addRow('<div class="t">now</div><div class="lang">·</div><div class="orig">[session saved] '+esc(r.session)+' · '+r.events+' dates</div>','evt'); }} catch(_){{}}
+    document.getElementById('endBtn').textContent='End session'; refreshSessions();
+  }};
+  refreshSessions();
+
   async function poll(){{
     try {{
       const h = await (await fetch('/health')).json();
@@ -540,6 +563,24 @@ def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[Fa
             return JSONResponse({"answer": "", "results": []})
         return JSONResponse(await run_in_threadpool(controller.recall.answer, q))
 
+    async def _session_end() -> JSONResponse:
+        return JSONResponse(await run_in_threadpool(controller.end_session))
+
+    async def _sessions() -> JSONResponse:
+        from . import notes
+
+        return JSONResponse({"sessions": notes.list_sessions()})
+
+    async def _session_ics(request: Request) -> Response:
+        from . import notes
+
+        name = request.query_params.get("session", "")
+        for s in notes.list_sessions():
+            if s["session"] == name and os.path.exists(s["ics_path"]):
+                return FileResponse(s["ics_path"], media_type="text/calendar",
+                                    filename=f"{name}.ics")
+        return Response(status_code=404)
+
     async def _catchup() -> JSONResponse:
         return JSONResponse(await run_in_threadpool(controller.catch_up))
 
@@ -557,6 +598,9 @@ def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[Fa
         app.add_api_route("/insight", _insight, methods=["POST"])
         app.add_api_route("/insights", _insights, methods=["GET"])
         app.add_api_route("/recall", _recall, methods=["GET"])
+        app.add_api_route("/session/end", _session_end, methods=["POST"])
+        app.add_api_route("/sessions", _sessions, methods=["GET"])
+        app.add_api_route("/session/ics", _session_ics, methods=["GET"])
         app.add_api_route("/mute", _mute, methods=["POST"])
         app.add_api_route("/unmute", _unmute, methods=["POST"])
 

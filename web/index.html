@@ -146,6 +146,9 @@
         <button class="act" id="insightBtn">Insight</button>
         <button class="act mute" id="muteBtn">Mute</button>
       </div>
+      <div class="row2">
+        <button class="act" id="endBtn" style="flex:1">End session &amp; save notes</button>
+      </div>
     </div>
   </div>
 
@@ -329,6 +332,15 @@
   }
   document.getElementById("recallBtn").onclick=doRecall;
   document.getElementById("recallQ").addEventListener("keydown", function(e){ if(e.key==="Enter") doRecall(); });
+  document.getElementById("endBtn").onclick=function(){
+    var b=document.getElementById("endBtn"); b.textContent="Saving…";
+    fetch("/session/end",{method:"POST"}).then(function(r){return r.json();}).then(function(res){
+      var card={_insight:true, time:"Session saved: "+res.session, topics:(res.notes&&res.notes.summary)||[],
+        questions:[], dates:(res.deadlines||[]).map(function(d){return {who:d.what, what:(d.date||d.when_text)};}),
+        tasks:(res.notes&&res.notes.tasks)||[]};
+      lines.push(card); renderStack(); b.textContent="End session & save notes";
+    }).catch(function(){ b.textContent="End session & save notes"; });
+  };
 
   async function requestWakeLock(){ try{ if("wakeLock" in navigator){ wakeLock=await navigator.wakeLock.request("screen"); } }catch(_){} }
   function diag(){

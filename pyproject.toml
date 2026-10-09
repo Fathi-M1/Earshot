@@ -18,6 +18,7 @@ dependencies = [
     "rapidfuzz>=3.14.6",
     "jellyfish>=1.2.1",
     "pyttsx3>=2.99",
+    "dateparser>=1.4.3",
 ]
 
 [project.optional-dependencies]
@@ -25,6 +26,7 @@ dev = [
     "pytest",
     "respx",
     "jiwer",
+    "icalendar>=7.3.0",
 ]
 
 [project.scripts]
