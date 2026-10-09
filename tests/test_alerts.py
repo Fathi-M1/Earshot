@@ -1,21 +1,38 @@
-"""Alert keyword matching (01 §3.4): fuzzy + phonetic hits, no false positives."""
+"""Alerts fire only on name (Levenshtein<=1) + exact keywords, with reasons.
+Required: 'agents' doesn't fire; a plain question doesn't fire; 'Fathy, the quiz'
+fires with BOTH reasons (Phase 3)."""
 
 from earshot import alerts
 
-
-def test_exact_and_fuzzy_name():
-    assert "Fathi" in alerts.fuzzy_hits("please welcome Fathi to the stage")
-    assert "quiz" in alerts.fuzzy_hits("there is a quiz tomorrow")
+NAMES = ["Fathi"]
+KW = ["quiz", "deadline", "exam", "midterm"]
 
 
-def test_tagalog_keyword():
-    assert "pagsusulit" in alerts.fuzzy_hits("may pagsusulit tayo bukas")
+def test_name_and_keyword_both_fire():
+    hits = alerts.check("Fathy, the quiz is Monday", NAMES, KW)
+    reasons = {h.reason for h in hits}
+    assert "Heard your name" in reasons
+    assert "Keyword: quiz" in reasons
 
 
-def test_no_false_positive():
-    assert alerts.fuzzy_hits("the weather is very nice today") == []
+def test_name_fuzzy_variants():
+    assert any(h.reason == "Heard your name" for h in alerts.check("hey Fati", NAMES, KW))
+    assert any(h.reason == "Heard your name" for h in alerts.check("Fathy!", NAMES, KW))
 
 
-def test_dedupes():
-    hits = alerts.fuzzy_hits("quiz quiz quiz deadline")
-    assert hits.count("quiz") == 1
+def test_agents_does_not_fire():
+    assert alerts.check("the agents are ready", NAMES, KW) == []
+
+
+def test_plain_question_does_not_fire():
+    assert alerts.check("What are you doing today?", NAMES, KW) == []
+
+
+def test_keyword_exact_only():
+    assert alerts.check("there is a quiz", NAMES, KW)        # exact 'quiz'
+    assert alerts.check("quizzical remark", NAMES, KW) == []  # not an exact word
+
+
+def test_reason_carries_matched_word():
+    hits = alerts.check("the deadline is near", NAMES, KW)
+    assert hits[0].reason == "Keyword: deadline" and hits[0].word == "deadline"

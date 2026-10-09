@@ -647,6 +647,17 @@ def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[Fa
     async def _insights() -> JSONResponse:
         return JSONResponse({"insights": controller.insights[-20:]})
 
+    async def _get_settings() -> JSONResponse:
+        from . import settings
+
+        return JSONResponse(settings.load())
+
+    async def _post_settings(request: Request) -> JSONResponse:
+        from . import settings
+
+        body = await request.json()
+        return JSONResponse(settings.save(body))
+
     async def _recall(request: Request) -> JSONResponse:
         q = request.query_params.get("q", "").strip()
         if not q:
@@ -688,6 +699,8 @@ def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[Fa
         app.add_api_route("/insight", _insight, methods=["POST"])
         app.add_api_route("/insights", _insights, methods=["GET"])
         app.add_api_route("/recall", _recall, methods=["GET"])
+        app.add_api_route("/settings", _get_settings, methods=["GET"])
+        app.add_api_route("/settings", _post_settings, methods=["POST"])
         app.add_api_route("/session/end", _session_end, methods=["POST"])
         app.add_api_route("/sessions", _sessions, methods=["GET"])
         app.add_api_route("/session/ics", _session_ics, methods=["GET"])

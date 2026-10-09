@@ -105,7 +105,7 @@ ANNOUNCEMENT_KEYWORDS = [
     "gate", "platform", "now boarding", "all aboard",
 ]
 ALERT_FUZZY_THRESHOLD = 88     # rapidfuzz partial_ratio
-ALERT_COOLDOWN_S = 20          # per-keyword cooldown
+ALERT_COOLDOWN_S = 30          # per-reason debounce
 ALERT_LLM_MODEL = LLM_DEFAULT  # qwen2.5:1.5b intent check
 ALERT_LLM_TIMEOUT = 4.0        # on timeout, the keyword hit stands
 ALERT_USE_LLM = True           # fuzzy pre-filter, then LLM intent confirm

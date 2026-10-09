@@ -26,7 +26,7 @@ import time
 
 import numpy as np
 
-from . import alerts, captions, config, llm, recall, voice
+from . import alerts, captions, config, llm, recall, settings, voice
 from .asr import Transcriber, _clean
 from .audio import RingMic
 
@@ -419,20 +419,22 @@ class LiveController:
         else:
             watch_en = original  # captions/ambient, or en: no translation
         primary, secondary = self._display_for(ctx, original, watch_en, lang)
-        is_alert, matched, alert_title = self._check_alert(watch_en, original, ctx["announcements"])
+        # Alerts: committed line only (we're in _refine), name (Lev<=1) + exact keywords.
+        reasons, matched = self._check_alert(original if lang != "en" else watch_en, original)
         self._emit({
             "type": "caption_update", "id": cid, "original": original, "english": watch_en,
             "lang": lang, "primary": primary, "secondary": secondary,
-            "matched": matched, "alert": is_alert,
+            "matched": matched, "alert": bool(reasons), "reasons": reasons,
             "timing": {"translate_ms": tr_ms, "refine_ms": int((time.perf_counter() - t0) * 1000)}, "ts": _ms(),
         })
         for chunk in captions.chunk_for_watch(watch_en):
             self.watch_queue.append(chunk)
-        if is_alert:
-            self.alert_title = captions.clip_title(alert_title or watch_en)
+        if reasons:
+            self.alert_title = captions.clip_title(" · ".join(r["reason"] for r in reasons))
             self.alert_until = time.monotonic() + config.ALERT_HOLD_S
             voice.chime()
-            self._emit({"type": "event", "kind": "alert", "detail": self.alert_title, "matched": matched, "ts": _ms()})
+            self._emit({"type": "event", "kind": "alert", "detail": self.alert_title,
+                        "reasons": reasons, "matched": matched, "ts": _ms()})
         self.history.append((time.time(), watch_en))
         self._pending_recall.append(watch_en)  # embedded when idle (recall worker)
         self.timing["translate_ms"] = tr_ms
@@ -474,29 +476,21 @@ class LiveController:
         except Exception:
             pass
 
-    def _check_alert(self, english: str, original: str, announcements: bool = False) -> tuple[bool, list[str], str]:
-        kws = list(config.ALERT_KEYWORDS)
-        if announcements:
-            kws += config.ANNOUNCEMENT_KEYWORDS
-        text = f"{english} {original}"
-        hits = alerts.fuzzy_hits(text, kws)
-        question = announcements and _is_question_to_me(english)
-        if not hits and not question:
-            return False, [], ""
+    def _check_alert(self, text: str, original: str) -> tuple[list[dict], list[str]]:
+        """Name (Levenshtein<=1) + exact keywords, committed lines only, 30s debounce
+        per reason. Returns (reasons[{reason,word}], matched_words)."""
+        hits = alerts.check(f"{text} {original}", settings.names(), settings.keywords())
+        if not hits:
+            return [], []
         now = time.monotonic()
-        key = (hits[0] if hits else "question?")
-        fresh = [k for k in hits if now - self._alert_cooldown.get(k.lower(), -1e9) >= config.ALERT_COOLDOWN_S]
-        if not fresh and not (question and now - self._alert_cooldown.get("question?", -1e9) >= config.ALERT_COOLDOWN_S):
-            return False, hits, ""
-        for k in (fresh or [key]):
-            self._alert_cooldown[k.lower()] = now
-        if config.ALERT_USE_LLM:
-            is_alert, title = alerts.intent_confirm(english)
-        else:
-            is_alert, title = True, english[:40]
-        if question:
-            is_alert = True
-        return is_alert, (hits or ["question"]), title
+        reasons, matched = [], []
+        for h in hits:
+            if now - self._alert_cooldown.get(h.reason, -1e9) < config.ALERT_COOLDOWN_S:
+                continue  # debounce this reason
+            self._alert_cooldown[h.reason] = now
+            reasons.append({"reason": h.reason, "word": h.word})
+            matched.append(h.word)
+        return reasons, matched
 
     # ---- mute (privacy) ----
     def mute(self, muted: bool) -> dict:
