@@ -94,8 +94,11 @@
   var audio=null, ws=null, backoff=500, lastState="LISTENING", wakeLock=null;
   var lines=[]; // committed {orig, eng, lang, alert}
 
-  fetch("/config").then(function(r){return r.json();}).then(function(c){
+  // Fetch the token from the server so it ALWAYS matches phone.token, even when
+  // an installed PWA launch drops the ?t= query (manifest start_url=".").
+  var cfgReady = fetch("/config").then(function(r){return r.json();}).then(function(c){
     display = c.displayName;
+    if (c.token) token = c.token;
     document.getElementById("brand-start").textContent = display;
     document.title = display + " remote";
   }).catch(function(){ document.getElementById("brand-start").textContent="…"; });
@@ -135,6 +138,11 @@
   }
 
   function onMsg(m){
+    if (m.type === "auth" && m.ok === false){
+      document.getElementById("partial").textContent =
+        "⚠ " + (m.reason||"auth failed") + " (got " + (m.got||"∅") + ", want " + (m.want||"?") + ")";
+      return;
+    }
     if (m.type === "track"){
       lastState = m.state || lastState;
       setMetadata(m);
@@ -152,17 +160,24 @@
     }
   }
 
-  function setConn(live){
+  function setConn(live, detail){
     document.getElementById("cdot").classList.toggle("live", live);
-    document.getElementById("conn").textContent = live ? "live" : "reconnecting…";
+    document.getElementById("conn").textContent = live ? "live" : ("reconnecting… " + (detail||""));
   }
   function connect(){
     if (ws && (ws.readyState===0 || ws.readyState===1)) return;
     var proto = location.protocol==="https:" ? "wss":"ws";
-    ws = new WebSocket(proto+"://"+location.host+"/ws/phone?t="+encodeURIComponent(token));
+    var url = proto+"://"+location.host+"/ws/phone?t="+encodeURIComponent(token);
+    console.log("[ws] connecting", url);
+    ws = new WebSocket(url);
     ws.onopen = function(){ setConn(true); backoff=500; };
     ws.onmessage = function(e){ try{ onMsg(JSON.parse(e.data)); }catch(_){} };
-    ws.onclose = function(){ setConn(false); setTimeout(connect, backoff); backoff=Math.min(backoff*2,8000); };
+    ws.onclose = function(e){
+      var why = "code " + e.code + (e.reason ? " · " + e.reason : "");
+      console.log("[ws] closed", e.code, e.reason);
+      setConn(false, why);
+      setTimeout(connect, backoff); backoff=Math.min(backoff*2,8000);
+    };
     ws.onerror = function(){ try{ ws.close(); }catch(_){} };
   }
 
@@ -199,14 +214,16 @@
     var standalone = (window.navigator.standalone === true) ||
                      (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
     var hasMS = ("mediaSession" in navigator);
-    var txt = (standalone?"standalone":"tab") + " · MS:" + (hasMS?"y":"n");
+    var txt = (standalone?"standalone":"tab") + " · MS:" + (hasMS?"y":"n") + " · t:" + (token||"∅").slice(0,4);
     document.getElementById("diag").textContent = txt;
-    console.log("[diag] standalone=", standalone, "mediaSession=", hasMS);
+    console.log("[diag] standalone=", standalone, "mediaSession=", hasMS, "token=", (token||"").slice(0,4));
   }
 
   document.getElementById("startBtn").addEventListener("click", function(){
-    startAudio(); wireMediaSession(); requestWakeLock(); diag();
-    show("main"); connect();
+    startAudio(); wireMediaSession(); requestWakeLock();
+    show("main");
+    // Connect only after /config resolves so the token matches phone.token.
+    cfgReady.then(function(){ diag(); connect(); }, function(){ diag(); connect(); });
   });
   document.getElementById("resumeBtn").addEventListener("click", function(){
     if (audio){ var p=audio.play(); if(p&&p.catch)p.catch(function(){}); }

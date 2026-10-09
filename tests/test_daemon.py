@@ -80,15 +80,32 @@ def test_phone_pwa_assets():
     assert font.status_code == 200
 
 
-def test_phone_ws_rejects_bad_token():
+def test_phone_ws_rejects_bad_token_with_reason():
     hub, _, phone = _apps()
     client = TestClient(phone)
     import pytest
     from starlette.websockets import WebSocketDisconnect
 
-    with pytest.raises(WebSocketDisconnect):
-        with client.websocket_connect("/ws/phone?t=wrong") as ws:
+    with client.websocket_connect("/ws/phone?t=wrong") as ws:
+        msg = json.loads(ws.receive_text())
+        assert msg["type"] == "auth" and msg["ok"] is False
+        assert "token mismatch" in msg["reason"]
+        with pytest.raises(WebSocketDisconnect):
             ws.receive_text()
+
+
+def test_phone_ws_accepts_good_token():
+    hub, _, phone = _apps()
+    client = TestClient(phone)
+    with client.websocket_connect(f"/ws/phone?t={hub.token}"):
+        pass  # handshake accepted, no immediate close
+
+
+def test_config_exposes_token():
+    hub, _, phone = _apps()
+    client = TestClient(phone)
+    cfg = client.get("/config").json()
+    assert cfg["token"] == hub.token
 
 
 class _FakeWS:

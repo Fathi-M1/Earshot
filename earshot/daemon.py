@@ -95,8 +95,9 @@ class Hub:
     _latest: dict = field(default_factory=dict)
     _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
-    async def connect(self, ws: WebSocket) -> None:
-        await ws.accept()
+    async def connect(self, ws: WebSocket, accept: bool = True) -> None:
+        if accept:
+            await ws.accept()
         async with self._lock:
             self._clients.add(ws)
         if self._latest:
@@ -401,7 +402,11 @@ def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[Fa
 
     @phone.get("/config")
     async def phone_config() -> JSONResponse:
-        return JSONResponse({"brand": brand.name(), "displayName": brand.display_name()})
+        # token is returned so the page can always match phone.token, even when a
+        # Home-Screen PWA launch drops the ?t= query (start_url=".").
+        return JSONResponse(
+            {"brand": brand.name(), "displayName": brand.display_name(), "token": hub.token}
+        )
 
     @phone.get("/manifest.webmanifest")
     async def phone_manifest() -> JSONResponse:
@@ -464,11 +469,20 @@ def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[Fa
 
     @phone.websocket("/ws/phone")
     async def phone_ws(ws: WebSocket) -> None:
+        # Accept FIRST so we can send a readable error + close reason on a bad
+        # token (a pre-accept close only gives the browser a generic 1006).
+        await ws.accept()
         token = ws.query_params.get("t")
         if token != hub.token:
-            await ws.close(code=4401)
+            with contextlib.suppress(Exception):
+                await ws.send_text(json.dumps({
+                    "type": "auth", "ok": False,
+                    "reason": "token mismatch — reopen the link",
+                    "got": (token or "")[:4], "want": hub.token[:4],
+                }))
+                await ws.close(code=4401, reason="token mismatch")
             return
-        await hub.connect(ws)
+        await hub.connect(ws, accept=False)  # already accepted above
         try:
             while True:
                 await ws.receive_text()  # phone sends button events later (P3)
