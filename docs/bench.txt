@@ -138,3 +138,125 @@ latency  partial=766ms commit=1702ms translate=Nonems e2e=1702ms (03:21:12)
 #   qwen2.5:3b removed; 1.5b keep_alive 5m (unloads when idle).
 # Targets: first words <=1.0s (tiny partial on 1s window ~0.84s) MET for en;
 #   commit <=2.0s (tiny 2.5s clip ~0.56s) MET for en; tl/ar latency MET, accuracy = live check.
+latency  partial=766ms commit=2869ms translate=Nonems e2e=2869ms (03:23:12)
+latency  partial=842ms commit=1722ms translate=Nonems e2e=1722ms (03:23:21)
+latency  partial=765ms commit=610ms translate=Nonems e2e=610ms (03:23:50)
+latency  partial=765ms commit=828ms translate=Nonems e2e=828ms (03:23:58)
+latency  partial=765ms commit=1739ms translate=Nonems e2e=1739ms (03:25:38)
+latency  partial=765ms commit=1721ms translate=Nonems e2e=1721ms (03:25:56)
+latency  partial=1891ms commit=2191ms translate=Nonems e2e=2191ms (03:26:09)
+latency  partial=0ms commit=2470ms translate=Nonems e2e=2470ms (03:26:23)
+latency  partial=0ms commit=1802ms translate=Nonems e2e=1802ms (03:26:37)
+latency  partial=765ms commit=1571ms translate=Nonems e2e=1571ms (03:26:48)
+latency  partial=0ms commit=2016ms translate=Nonems e2e=2016ms (03:27:01)
+latency  partial=812ms commit=549ms translate=Nonems e2e=549ms (03:29:48)
+latency  partial=0ms commit=789ms translate=Nonems e2e=789ms (03:29:56)
+latency  partial=1875ms commit=592ms translate=Nonems e2e=592ms (03:30:05)
+latency  partial=0ms commit=578ms translate=Nonems e2e=578ms (03:30:28)
+latency  partial=0ms commit=1710ms translate=1578ms e2e=1710ms (03:30:55)
+latency  partial=0ms commit=1613ms translate=Nonems e2e=1613ms (03:31:10)
+latency  partial=843ms commit=626ms translate=Nonems e2e=626ms (03:31:23)
+latency  partial=890ms commit=656ms translate=Nonems e2e=656ms (03:31:36)
+latency  partial=0ms commit=624ms translate=Nonems e2e=624ms (03:31:48)
+latency  partial=890ms commit=618ms translate=Nonems e2e=618ms (03:32:09)
+latency  partial=0ms commit=604ms translate=Nonems e2e=604ms (03:32:37)
+latency  partial=0ms commit=539ms translate=Nonems e2e=539ms (03:33:14)
+latency  partial=1640ms commit=561ms translate=Nonems e2e=561ms (03:33:27)
+latency  partial=0ms commit=547ms translate=Nonems e2e=547ms (03:33:47)
+latency  partial=827ms commit=603ms translate=Nonems e2e=603ms (03:34:00)
+latency  partial=0ms commit=544ms translate=Nonems e2e=544ms (03:34:14)
+latency  partial=0ms commit=615ms translate=Nonems e2e=615ms (03:34:46)
+latency  partial=1577ms commit=576ms translate=Nonems e2e=576ms (03:34:59)
+latency  partial=827ms commit=543ms translate=Nonems e2e=543ms (03:35:30)
+latency  partial=0ms commit=562ms translate=Nonems e2e=562ms (03:35:40)
+latency  partial=780ms commit=548ms translate=Nonems e2e=548ms (03:35:52)
+latency  partial=780ms commit=571ms translate=Nonems e2e=571ms (03:36:03)
+latency  partial=827ms commit=565ms translate=Nonems e2e=565ms (03:36:14)
+latency  partial=843ms commit=579ms translate=Nonems e2e=579ms (03:36:29)
+latency  partial=827ms commit=548ms translate=Nonems e2e=548ms (03:36:44)
+latency  partial=796ms commit=592ms translate=Nonems e2e=592ms (03:36:56)
+latency  partial=797ms commit=573ms translate=Nonems e2e=573ms (03:37:06)
+latency  partial=0ms commit=557ms translate=Nonems e2e=557ms (03:37:38)
+latency  partial=0ms commit=1623ms translate=1681ms e2e=1623ms (03:37:56)
+latency  partial=0ms commit=1674ms translate=1509ms e2e=1674ms (03:38:17)
+latency  partial=0ms commit=537ms translate=1083ms e2e=537ms (03:38:31)
+latency  partial=780ms commit=552ms translate=1593ms e2e=552ms (03:38:50)
+latency  partial=2297ms commit=2296ms translate=1042ms e2e=2296ms (03:42:54)
+latency  partial=2297ms commit=2254ms translate=1270ms e2e=2254ms (03:43:18)
+latency  partial=3952ms commit=4567ms translate=5201ms e2e=4567ms (03:43:55)
+latency  partial=1594ms commit=4567ms translate=1223ms e2e=4567ms (03:44:13)
+latency  partial=2234ms commit=4747ms translate=1421ms e2e=4747ms (03:44:36)
+latency  partial=969ms commit=2251ms translate=1163ms e2e=2251ms (03:44:52)
+latency  partial=1438ms commit=2741ms translate=Nonems e2e=2741ms (03:45:01)
+latency  partial=936ms commit=633ms translate=Nonems e2e=633ms (03:45:09)
+latency  partial=0ms commit=1856ms translate=Nonems e2e=1856ms (03:45:21)
+latency  partial=2156ms commit=669ms translate=Nonems e2e=669ms (03:45:32)
+latency  partial=859ms commit=637ms translate=Nonems e2e=637ms (03:45:43)
+latency  partial=0ms commit=665ms translate=Nonems e2e=665ms (03:45:53)
+latency  partial=969ms commit=758ms translate=Nonems e2e=758ms (03:46:02)
+latency  partial=1125ms commit=776ms translate=1021ms e2e=776ms (03:46:21)
+latency  partial=1077ms commit=748ms translate=1362ms e2e=748ms (03:46:37)
+latency  partial=1202ms commit=1877ms translate=1287ms e2e=1877ms (03:46:49)
+latency  partial=2108ms commit=788ms translate=1499ms e2e=788ms (03:47:00)
+latency  partial=1140ms commit=1035ms translate=1718ms e2e=1035ms (03:47:41)
+latency  partial=890ms commit=2280ms translate=1631ms e2e=2280ms (03:47:56)
+latency  partial=1592ms commit=902ms translate=1612ms e2e=902ms (03:48:25)
+latency  partial=1592ms commit=902ms translate=986ms e2e=902ms (03:48:38)
+latency  partial=1875ms commit=1107ms translate=1999ms e2e=1107ms (03:48:57)
+latency  partial=3313ms commit=1107ms translate=1518ms e2e=1107ms (03:49:06)
+latency  partial=1172ms commit=3618ms translate=1724ms e2e=3618ms (03:49:20)
+latency  partial=765ms commit=806ms translate=1622ms e2e=806ms (03:49:40)
+latency  partial=1157ms commit=717ms translate=1210ms e2e=717ms (03:50:00)
+latency  partial=1281ms commit=723ms translate=1489ms e2e=723ms (03:50:10)
+latency  partial=1156ms commit=1379ms translate=5341ms e2e=1379ms (03:50:39)
+latency  partial=1297ms commit=972ms translate=4511ms e2e=972ms (03:50:57)
+
+## bench [en tiny.en only] fast=tiny.en final=tiny.en (2026-10-10 07:19:18)
+cat       wav                     dur   wer  part commit worst halluc wscript
+en-fast   en-fast-1.wav           1.8  0.00   658    739   738      0       0
+en-fast   en-fast-2.wav           1.9  0.00   529    643   620      0       0
+en-fast   en-fast-3.wav           2.1  0.50   516    616   750      3       0
+en-fast   en-fast-4.wav           2.4  0.11   670    750   788      1       0
+en-fast   en-fast-5.wav           2.1  0.22   532    650   717      2       0
+en-fast   en-fast-6.wav           1.8  0.29   508    725   695      2       0
+en-fast   en-fast-runon-1.wav    15.2  0.34   551    813   946      7       0
+en-fast   en-fast-runon-2.wav    13.3  0.17   546    886  1051      4       0
+en-normal en-normal-1.wav         2.4  0.12   563    703   753      1       0
+en-normal en-normal-2.wav         2.4  0.00   540    703   662      0       0
+en-normal en-normal-3.wav         2.7  0.50   561    729   782      3       0
+en-normal en-normal-4.wav         3.4  0.00   504    793   802      0       0
+en-normal en-normal-5.wav         2.7  0.22   615    746   784      2       0
+en-normal en-normal-6.wav         2.3  0.29   526    677   742      2       0
+-- means by category --               
+en-fast    n=8  WER=0.204  partial=563ms  commit=727ms  worst=1051ms  halluc=19  wrong_script=0
+en-normal  n=6  WER=0.189  partial=551ms  commit=725ms  worst=802ms  halluc=8  wrong_script=0
+
+## bench [en base.en final] fast=tiny.en final=base.en (2026-10-10 07:20:10)
+cat       wav                     dur   wer  part commit worst halluc wscript
+en-fast   en-fast-1.wav           1.8  0.12   549   1455  1316      1       0
+en-fast   en-fast-2.wav           1.9  0.00   635   1334  1393      0       0
+en-fast   en-fast-3.wav           2.1  0.38   707   1435  1313      1       0
+en-fast   en-fast-4.wav           2.4  0.00   656   1467  1276      0       0
+en-fast   en-fast-5.wav           2.1  0.22   687   1292  1340      2       0
+en-fast   en-fast-6.wav           1.8  0.29   644   1326  1251      2       0
+en-fast   en-fast-runon-1.wav    15.2  0.19   690   1604  1787      3       0
+en-fast   en-fast-runon-2.wav    13.3  0.17   686   1572  1741      3       0
+en-normal en-normal-1.wav         2.4  0.12   593   1373  1230      1       0
+en-normal en-normal-2.wav         2.4  0.00   726   1324  1185      0       0
+en-normal en-normal-3.wav         2.7  0.50   679   1321  1301      2       0
+en-normal en-normal-4.wav         3.4  0.00   630   1362  1369      0       0
+en-normal en-normal-5.wav         2.7  0.22   635   1327  1242      2       0
+en-normal en-normal-6.wav         2.3  0.29   634   1283  1368      2       0
+-- means by category --               
+en-fast    n=8  WER=0.171  partial=656ms  commit=1435ms  worst=1787ms  halluc=12  wrong_script=0
+en-normal  n=6  WER=0.189  partial=649ms  commit=1331ms  worst=1369ms  halluc=7  wrong_script=0
+
+## PHASE 1 DECISION (English): fast=tiny.en (partials+instant commit), final=base.en (refine)
+# base.en vs tiny.en-only on synthetic en-fast: WER 0.171 vs 0.204, halluc 12 vs 19,
+#   wrong_script 0/0, commit 1435ms (<=1.5s), worst 1787ms (<=3s). base.en chosen.
+# NOTE: WER inflated by number/punct formatting in synthetic clips ("5 p.m." vs
+#   "five p m", "3" vs "three"); true spoken WER needs a live check. 0 script errors,
+#   0 repeated-phrase loops (compression_ratio_threshold 2.4 + no_repeat_ngram 3).
+# Guards: temperature 0, log_prob<-1.0 drop, no_speech 0.6, condition_on_previous_text False,
+#   hotwords="Fathi quiz deadline midterm exam assignment FEU Tech ACM Monday".
+# VAD force-split at 8s with 1s overlap + word dedupe (run-on 15s never one chunk).

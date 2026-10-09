@@ -98,10 +98,12 @@ class Transcriber:
             vad_filter=True,
             condition_on_previous_text=False,
             no_speech_threshold=0.6,
+            compression_ratio_threshold=2.4,   # drop gibberish/repeated loops
             no_repeat_ngram_size=3,
             repetition_penalty=1.15,
             log_prob_threshold=-1.0,
             initial_prompt=config.INITIAL_PROMPTS.get(language),
+            hotwords=(config.HOTWORDS if (task == "transcribe" and language == "en") else None),
         )
         segs = list(segments)
         text = " ".join(s.text.strip() for s in segs).strip()

@@ -59,13 +59,12 @@ class LiveController:
         self.mode = "counter"
         self._loop: asyncio.AbstractEventLoop | None = None
         self._mic: RingMic | None = None
-        # two-tier ASR: fast base for partials + instant commit, small to refine
-        self._fast = Transcriber(config.ASR_FAST)
-        self._accurate = Transcriber(config.ASR_ACCURATE)
-        self._transcriber = self._fast  # back-compat alias
+        # two-tier ASR, per language: tiny.en/base.en for en, tiny/small for tl/ar.
+        self._models: dict[str, Transcriber] = {}
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._cid = 0                    # committed-line id (for background replace)
+        self._prev_tail = ""             # last words of the prev forced-split commit (overlap dedupe)
         self._speaking = False           # gates recall/insight work to idle time
         self._pending_recall: collections.deque[str] = collections.deque()
         self.timing: dict = {}           # last per-stage latency (ms)
@@ -98,6 +97,20 @@ class LiveController:
 
     def attach_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
+
+    # ---- per-language model selection (lazy-loaded, cached) ----
+    def _model(self, name: str) -> Transcriber:
+        tr = self._models.get(name)
+        if tr is None:
+            tr = Transcriber(name)
+            self._models[name] = tr
+        return tr
+
+    def _fast_tr(self, lang: str) -> Transcriber:
+        return self._model(config.fast_model(lang))
+
+    def _final_tr(self, lang: str) -> Transcriber:
+        return self._model(config.final_model(lang))
 
     # ---- app mode (ambient | captions | translate) + reading language ----
     def set_app_mode(self, app_mode: str | None = None, read_lang: str | None = None,
@@ -197,9 +210,11 @@ class LiveController:
 
     # ---- worker (two-tier: fast captions now, accurate refine in background) ----
     def _worker(self) -> None:
-        self._emit({"type": "event", "kind": "loading", "detail": config.ASR_FAST, "ts": _ms()})
-        self._fast.load()
-        self._emit({"type": "event", "kind": "ready", "detail": config.ASR_FAST, "ts": _ms()})
+        # warm the fast model for the currently-selected spoken language
+        fast_name = config.fast_model(self._asr_lang_for_mode())
+        self._emit({"type": "event", "kind": "loading", "detail": fast_name, "ts": _ms()})
+        self._model(fast_name).load()
+        self._emit({"type": "event", "kind": "ready", "detail": fast_name, "ts": _ms()})
         threading.Thread(target=self._warm_background, name="earshot-warm", daemon=True).start()
 
         st = {"active": False, "utt_start": 0.0, "last_partial": 0.0, "last_speech": 0.0,
@@ -224,9 +239,11 @@ class LiveController:
         # Warm the FAST tier (always used). The small model stays lazy — it only
         # loads on the first ar/tl line, keeping English sessions under the RAM cap.
         t0 = time.perf_counter()
+        lang = self._asr_lang_for_mode()
         try:
-            self._fast.load()
-            self._fast._run(dummy, "transcribe", "en", 1)
+            tr = self._fast_tr(lang)
+            tr.load()
+            tr._run(dummy, "transcribe", lang, 1)
         except Exception:
             pass
         timings["fast"] = int((time.perf_counter() - t0) * 1000)
@@ -266,7 +283,7 @@ class LiveController:
                 dur = min(now - st["utt_start"] + 0.2, config.PARTIAL_WINDOW_S)
                 samples = self._mic.snapshot(dur)
                 try:
-                    raw, conf = self._fast._run(samples, "transcribe", st["lang"], config.ASR_BEAM_PARTIAL)
+                    raw, conf = self._fast_tr(st["lang"])._run(samples, "transcribe", st["lang"], config.ASR_BEAM_PARTIAL)
                     txt = _clean(raw, conf)
                 except Exception:
                     txt = ""
@@ -279,12 +296,17 @@ class LiveController:
                     self._emit({"type": "caption", "committed": False, "original": txt,
                                 "english": "", "lang": st["lang"] or "", "ts": _ms()})
             if now - st["utt_start"] >= config.MAX_UTTERANCE_S:
-                self._commit(now, st["utt_start"], st["lang"]); st["active"] = False
+                # force-split long run-on speech; keep going with a 1 s overlap so no
+                # words are lost at the boundary (dedupe handled in _commit).
+                self._commit(now, st["utt_start"], st["lang"], forced=True)
+                st.update(utt_start=now - config.SPLIT_OVERLAP_S, last_partial=0.0,
+                          last_text="", first_partial=True)
         else:
             self._speaking = False
             self._last_speech_end = st["last_speech"]
             if st["active"] and (now - st["last_speech"]) >= pause_s:
                 self._commit(now, st["utt_start"], st["lang"]); st["active"] = False
+                self._prev_tail = ""  # natural pause — next line is independent
 
     def _turn_asr_lang(self) -> str:
         return self.conv["their"] if self.conv["turn"] == "them" else self.conv["mine"]
@@ -299,7 +321,20 @@ class LiveController:
     def _rtl(self, lang: str) -> bool:
         return lang in config.RTL_LANGS
 
-    def _commit(self, now: float, utt_start: float, utt_lang: str | None) -> None:
+    def _dedupe_overlap(self, text: str) -> str:
+        """After a forced split (1 s overlap), drop leading words that repeat the
+        tail of the previous chunk, by word match."""
+        if not self._prev_tail or not text:
+            return text
+        tail = self._prev_tail.lower().split()
+        words = text.split()
+        low = [w.strip(".,?!").lower() for w in words]
+        for k in range(min(len(tail), len(low)), 0, -1):
+            if low[:k] == [t.strip(".,?!") for t in tail[-k:]]:
+                return " ".join(words[k:]).strip()
+        return text
+
+    def _commit(self, now: float, utt_start: float, utt_lang: str | None, forced: bool = False) -> None:
         if self._mic is None:
             return
         if (now - utt_start) < config.MIN_SEGMENT_S:  # drop sub-0.6s blips
@@ -308,13 +343,15 @@ class LiveController:
         lang = utt_lang or self._asr_lang_for_mode()  # always user-selected, never detect
         t0 = time.perf_counter()
         try:
-            raw, conf = self._fast._run(samples, "transcribe", lang, config.ASR_BEAM_COMMIT)
+            raw, conf = self._fast_tr(lang)._run(samples, "transcribe", lang, config.ASR_BEAM_COMMIT)
         except Exception as exc:
             self._emit({"type": "event", "kind": "asr_error", "detail": str(exc), "ts": _ms()})
             return
         original = _clean(raw, conf)
+        original = self._dedupe_overlap(original)  # strip words repeated from a forced split
         if not original:
             return
+        self._prev_tail = " ".join(original.split()[-4:]) if forced else ""
         commit_ms = int((time.perf_counter() - t0) * 1000)
         self._cid += 1
         cid = self._cid
@@ -340,17 +377,17 @@ class LiveController:
         t0 = time.perf_counter()
         if cid != self._refine_gen:  # a newer line already committed — drop this one
             return
-        # English: tiny == small accuracy (measured WER 0.04 on clean en) at 6x the
-        # speed, so DON'T run the slow small re-transcribe for en — tiny is final.
-        if lang == "en":
+        # Re-transcribe with the final model (en: base.en, tl/ar: small). Skip when
+        # the final model == the fast model (nothing to gain).
+        if config.final_model(lang) == config.fast_model(lang):
             original = original_fast
         else:
-            try:  # ar/tl: small re-transcribe for accuracy (background, latest-wins)
-                raw, conf = self._accurate._run(samples, "transcribe", lang, 1)
-                original = _clean(raw, conf) or original_fast
+            try:
+                raw, conf = self._final_tr(lang)._run(samples, "transcribe", lang, config.ASR_BEAM_FINAL)
+                original = self._dedupe_overlap(_clean(raw, conf)) or original_fast
             except Exception:
                 original = original_fast
-            if cid != self._refine_gen:  # became stale during the slow re-transcribe
+            if cid != self._refine_gen:  # became stale during the slower re-transcribe
                 return
         # English via whisper translate (xx->en) — no LLM on this path
         tr_ms = None
@@ -359,7 +396,7 @@ class LiveController:
         else:
             tt = time.perf_counter()
             try:
-                en_raw, en_conf = self._fast._run(samples, "translate", lang, 1)
+                en_raw, en_conf = self._fast_tr(lang)._run(samples, "translate", lang, 1)
                 watch_en = _clean(en_raw, en_conf) or original
             except Exception:
                 watch_en = original

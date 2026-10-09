@@ -26,16 +26,29 @@ CONV_DEFAULT = {"their": "ar", "mine": "en", "turn": "them"}
 SRC_LANG_DEFAULT = "en"
 
 # --- ASR models (multilingual; NOT the .en models) ---
-# Two-tier: FAST drives partials + the instant commit; ACCURATE refines in the
-# background and replaces the line. Speed beats everything. On this Iris Xe CPU
-# base RTF ~0.88 (measured) can't stream at 0.7s, so FAST=tiny (RTF ~0.3);
-# small refines in the background.
-ASR_FAST = "tiny"            # fast partials + instant commit + xx->en translate (beam 1)
-ASR_ACCURATE = "small"       # background re-transcribe for accuracy (beam 1)
+# Two-tier, per language. English uses the faster+more-accurate .en models;
+# tl/ar use multilingual. FAST = partials + instant commit; FINAL = background
+# refine that replaces the line in place (skipped when FINAL == FAST).
+ASR_FAST_EN = "tiny.en"
+ASR_FINAL_EN = "base.en"
+ASR_FAST_ML = "tiny"         # tl/ar partials
+ASR_FINAL_ML = "small"       # tl/ar refine
+# back-compat (bench/asr defaults)
+ASR_FAST = "tiny"
+ASR_ACCURATE = "small"
+
+
+def fast_model(lang: str) -> str:
+    return ASR_FAST_EN if lang == "en" else ASR_FAST_ML
+
+
+def final_model(lang: str) -> str:
+    return ASR_FINAL_EN if lang == "en" else ASR_FINAL_ML
 ASR_MODEL = ASR_FAST         # back-compat for bench/asr default
 ASR_MODEL_FALLBACK = "tiny"
-ASR_BEAM_COMMIT = 1          # NEVER beam-search on the hot path
+ASR_BEAM_COMMIT = 1          # NEVER beam-search on the hot (instant-commit) path
 ASR_BEAM_PARTIAL = 1
+ASR_BEAM_FINAL = 5           # background refine can afford beam 5 (accuracy)
 
 # Now Playing (watch / lock screen) shows the English translation.
 TRANSLATE_FOR_NOWPLAYING = True
@@ -45,7 +58,8 @@ SAMPLE_RATE = 16000
 RING_SECONDS = 30            # RAM ring buffer length (privacy: last 30 s only)
 LOOP_TICK_S = 0.25           # how often the worker checks VAD state
 PARTIAL_INTERVAL_S = 0.7     # stream a partial this often while speaking
-MAX_UTTERANCE_S = 12.0       # force a commit if speech runs this long
+MAX_UTTERANCE_S = 8.0        # force-split run-on speech at 8 s (never one huge chunk)
+SPLIT_OVERLAP_S = 1.0        # overlap kept after a forced split (dedupe in _commit)
 PARTIAL_WINDOW_S = 6.0       # cap the sliding partial/commit window (speed)
 PAUSE_SILENCE_MS = 450       # commit after this much trailing silence
 MIN_SEGMENT_S = 0.6          # drop utterances shorter than this (noise blips)
@@ -62,7 +76,9 @@ WATCH_CHUNK_WORDS = 6
 ALERT_HOLD_S = 8.0           # an alert overrides the watch title for this long
 
 # --- initial prompts (bias spelling) ---
-EN_PROMPT = "Class announcement. Names: Fathi. Terms: quiz, exam, midterm, deadline, due, submit, assignment, Monday."
+EN_PROMPT = "Class at FEU Tech. Names: Fathi. Terms: quiz, exam, midterm, deadline, due, submit, assignment, ACM, Monday."
+# hotwords bias the decoder toward these exact tokens (faster-whisper `hotwords`).
+HOTWORDS = "Fathi quiz deadline midterm exam assignment FEU Tech ACM Monday"
 TAGLISH_PROMPT = (
     "Kumusta, ayos lang, salamat, opo, hindi, saan, ano. "
     "Fathi, quiz, exam, deadline, submit, assignment, Lunes, bukas, pagsusulit."
