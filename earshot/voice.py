@@ -31,23 +31,23 @@ def _speak_piper(text: str) -> bool:
     voice = _find_piper_voice()
     if voice is None:
         return False
-    # 1) piper-tts Python wheel
+    # piper-tts Python wheel (1.3.0 API: synthesize() -> AudioChunk)
     try:
         import sounddevice as sd
         from piper import PiperVoice
 
         v = PiperVoice.load(str(voice))
         chunks = []
-        for audio in v.synthesize_stream_raw(text):
-            chunks.append(np.frombuffer(audio, dtype=np.int16))
+        rate = 22050
+        for ch in v.synthesize(text):
+            chunks.append(ch.audio_float_array)
+            rate = ch.sample_rate
         if chunks:
-            pcm = np.concatenate(chunks).astype(np.float32) / 32768.0
-            sd.play(pcm, int(v.config.sample_rate))
+            sd.play(np.concatenate(chunks), rate)
             sd.wait()
             return True
     except Exception:
         pass
-    # 2) piper.exe binary writing to a device is complex; skip to SAPI.
     return False
 
 
