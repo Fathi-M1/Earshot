@@ -41,3 +41,12 @@ Planning docs and brand kit were prepared before the build (disclosed in README)
 - **Notes (C):** End session → 1.5b notes + dateparser (handles "next Friday" via modifier-strip) + hand-written .ics (validated with icalendar). Sessions list + .ics download.
 - **Install/QR (E):** scripts/install.ps1 (uv, Ollama, models, Start-menu shortcut) + start.ps1; QR of the phone URL on /live (/qr.png) and printed to the terminal on serve.
 - 56 tests passing. All new endpoints smoke-tested live.
+
+## P3 — latency rewrite (speech→caption 45s → ~2.6s)
+- Root cause: commit ran `small` beam-5 + a second `small` translate pass serially (+LLM), ~15s/segment stacked to 45-50s.
+- Two-tier ASR: FAST=`tiny` (int8, beam 1) streams partials ~0.7s and the INSTANT commit + whisper xx→en translate; ACCURATE=`small` re-transcribes in a background thread and replaces the line by id. Captions never wait on the LLM. (base measured RTF ~0.88 on this Iris Xe — too slow to stream, hence tiny.)
+- Language bug fixed: the selected/detected language is passed as `language=<code>` to every transcribe call; AMBIENT detects once on ~5s then locks.
+- Translation: xx→English = whisper `task=translate` (no LLM); English→their-language = qwen2.5:1.5b, async in the refine thread, temperature 0, num_predict 60, keep_alive -1. Recall embeddings + insights run only when idle (never while speaking).
+- Per-stage timing (partial/commit/translate ms) shown on phone + /live and appended to docs/bench.txt. Measured compute (worst-case noise): tiny first-partial 837ms, commit 909ms, translate 1093ms; live real speech commit ~2.6-2.9s.
+- Accuracy: VAD min_silence 400ms, drop <0.6s blips, condition_on_previous_text=False, no_speech 0.6, hallucination blacklist; Arabic forced `ar`; Tagalog forced `tl` + initial_prompt (Kumusta, ayos lang, salamat, opo, hindi, saan, ano…).
+- Piper TTS (en_US-lessac-medium) wired for catch-up with SAPI fallback. Demo mode (`serve --demo`) preloads models + starts live + QR. Dropped 3b prewarm (unused on hot path; it was stealing CPU from ASR → startup partial spikes). 56 tests.
