@@ -392,6 +392,13 @@ def _live_page(token: str, dev: bool = True) -> str:
           <button class="cv" id="catchBtn" style="flex:1;height:40px">Catch me up</button>
           <button class="cv" id="muteBtn" style="flex:1;height:40px">Mute</button>
         </div>
+        <div id="catchCard" style="display:none;margin-top:10px;padding:10px;border:1px solid rgba(169,184,156,.35);border-radius:10px">
+          <div id="catchBody" style="font-size:15px;font-weight:600"></div>
+          <div style="display:flex;justify-content:space-between;margin-top:8px">
+            <span id="catchSrc" style="color:var(--sage);font-size:12px"></span>
+            <button class="cv" id="hearBtn" style="height:32px">Hear it</button>
+          </div>
+        </div>
       </div>
       <div class="card" style="margin-top:16px">
         <h2>Privacy / status · measured live</h2>
@@ -458,6 +465,8 @@ def _live_page(token: str, dev: bool = True) -> str:
       curConv = {{their:m.their, mine:m.mine, turn:m.turn}}; syncConv();
     }} else if (m.type === 'appmode'){{
       curMode = m.app_mode; curRead = m.read_lang; curSrc = m.src_lang || curSrc; syncConv();
+    }} else if (m.type === 'catchup'){{
+      showCatch(m);
     }} else if (m.type === 'insight'){{
       window._insights = (window._insights||[]); window._insights.push(m); renderInsights();
     }} else if (m.type === 'event'){{
@@ -515,7 +524,25 @@ def _live_page(token: str, dev: bool = True) -> str:
   document.querySelectorAll('[data-their]').forEach(b=>b.onclick=()=>{{ post('/conv',{{their:b.dataset.their}}); curConv.their=b.dataset.their; syncConv(); }});
   document.querySelectorAll('[data-mine]').forEach(b=>b.onclick=()=>{{ post('/conv',{{mine:b.dataset.mine}}); curConv.mine=b.dataset.mine; syncConv(); }});
   document.querySelectorAll('[data-turn]').forEach(b=>b.onclick=()=>{{ post('/conv',{{turn:b.dataset.turn}}); curConv.turn=b.dataset.turn; syncConv(); }});
-  document.getElementById('catchBtn').onclick=()=>post('/catchup');
+  let catchTimer=null;
+  function showCatchSkeleton(){{
+    const card=document.getElementById('catchCard'); card.style.display='block';
+    document.getElementById('catchBody').textContent='…';
+    document.getElementById('catchSrc').textContent='';
+    clearTimeout(catchTimer);
+    catchTimer=setTimeout(()=>{{
+      if(document.getElementById('catchBody').textContent==='…')
+        showCatch({{line1:'Nothing to catch up on yet.', line2:'', source:'extractive'}});
+    }}, 3000);
+  }}
+  function showCatch(m){{
+    clearTimeout(catchTimer);
+    document.getElementById('catchCard').style.display='block';
+    document.getElementById('catchBody').textContent=(m.line1||'')+(m.line2?(' — '+m.line2):'');
+    document.getElementById('catchSrc').textContent=m.source==='llm'?'summary':'quick recap';
+  }}
+  document.getElementById('catchBtn').onclick=()=>{{ showCatchSkeleton(); post('/catchup'); }};
+  document.getElementById('hearBtn').onclick=()=>post('/catchup/say');
   document.getElementById('insightBtn').onclick=()=>post('/insight');
   document.getElementById('muteBtn').onclick=async()=>{{
     const r = await post(curMuted?'/unmute':'/mute');

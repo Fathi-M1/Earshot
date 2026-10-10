@@ -43,6 +43,18 @@ def test_catchup_llm_replaces_card(monkeypatch):
     assert any(m["source"] == "llm" and m["line1"] == "Quiz Monday" for m in cards)  # replaced
 
 
+def test_extractive_uses_last_alert_and_two_lines(monkeypatch):
+    c, _emitted = _controller(monkeypatch)
+    monkeypatch.setattr(L.llm, "chat_json", lambda *a, **k: None)
+    monkeypatch.setattr(L.voice, "speak", lambda t: (_ for _ in ()).throw(AssertionError("tts")))
+    c._last_alert_line = "Fathi, the quiz is Monday"
+    c.history.append((time.time(), "chapter three is due"))
+    c.history.append((time.time(), "bring the notes"))
+    res = c.catch_up()
+    assert "quiz" in res["line1"].lower()
+    assert "chapter" in res["line2"] and "notes" in res["line2"]
+
+
 def test_hear_it_speaks(monkeypatch):
     c, emitted = _controller(monkeypatch)
     said = []

@@ -113,7 +113,7 @@ ALERT_USE_LLM = True           # fuzzy pre-filter, then LLM intent confirm
 # --- Catch me up ---
 CATCHUP_MINUTES = 5
 CATCHUP_MODEL = LLM_DEFAULT    # qwen2.5:1.5b
-CATCHUP_TIMEOUT = 12.0         # extractive fallback beyond this
+CATCHUP_TIMEOUT = 3.0          # extractive fallback if the model is slower than this
 CATCHUP_MAX_WORDS = 900
 
 # --- hallucination filter ---

@@ -432,6 +432,7 @@ class LiveController:
         for chunk in captions.chunk_for_watch(watch_en):
             self.watch_queue.append(chunk)
         if reasons:
+            self._last_alert_line = watch_en
             self.alert_title = captions.clip_title(" · ".join(r["reason"] for r in reasons))
             self.alert_until = time.monotonic() + config.ALERT_HOLD_S
             voice.chime()
@@ -522,15 +523,15 @@ class LiveController:
 
     # ---- catch me up ----
     def _extractive_catchup(self, recent: list[str]) -> dict:
-        """Instant, no-LLM recap: the last couple of committed lines."""
-        if not recent:
+        """Instant, no-LLM recap: the last alert plus the last two lines. No voice."""
+        alert = getattr(self, "_last_alert_line", "") or ""
+        tail = [t for t in recent[-2:] if t]
+        if not alert and not tail:
             return {"line1": "Nothing to catch up on yet.", "line2": "", "source": "extractive"}
-        tail = recent[-2:]
-        return {
-            "line1": tail[-1][:60],
-            "line2": (tail[-2][:60] if len(tail) > 1 else "(quick recap)"),
-            "source": "extractive",
-        }
+        line1 = (alert or tail[-1])[:160]
+        bits = tail if alert else tail[:-1]
+        line2 = " · ".join(bits)[:160]
+        return {"line1": line1, "line2": line2, "source": "extractive"}
 
     def catch_up(self) -> dict:
         cid = f"cu{_ms()}"

@@ -322,9 +322,21 @@
     }
   }
   document.querySelectorAll("[data-mode]").forEach(function(b){ b.onclick=function(){ post("/appmode",{app_mode:b.dataset.mode}); appMode=b.dataset.mode; syncControls(); }; });
+  var catchTimer=null;
+  function localCatch(){
+    var alerts=lines.filter(function(l){return l._alert;});
+    var said=lines.filter(function(l){return l.primary||l.text;});
+    var alert=alerts.length? (alerts[alerts.length-1].text||alerts[alerts.length-1].primary||"") : "";
+    var tail=said.slice(-2).map(function(l){return l.primary||l.text||"";});
+    return {line1: alert||tail[tail.length-1]||"Nothing to catch up on yet.", line2: tail.join(" · "), source:"extractive"};
+  }
   function showCatchSkeleton(){ $("ccBody").innerHTML='<div class="sk"></div><div class="sk" style="width:70%"></div>';
-    $("ccSrc").textContent=""; $("catchCard").classList.add("on"); }
-  function fillCatch(m){ $("ccBody").innerHTML='<div>'+esc(m.line1||"")+'</div>'+(m.line2?'<div class="l2">'+esc(m.line2)+'</div>':"");
+    $("ccSrc").textContent=""; $("catchCard").classList.add("on");
+    clearTimeout(catchTimer);
+    catchTimer=setTimeout(function(){ if($("ccBody").querySelector(".sk")) fillCatch(localCatch()); }, 3000);
+  }
+  function fillCatch(m){ clearTimeout(catchTimer);
+    $("ccBody").innerHTML='<div>'+esc(m.line1||"")+'</div>'+(m.line2?'<div class="l2">'+esc(m.line2)+'</div>':"");
     $("ccSrc").textContent=(m.source==="llm"?("summary · "+(m.ms||"")+"ms"):"quick recap"); }
   $("catchBtn").onclick=function(){ showCatchSkeleton(); post("/catchup"); };
   $("ccClose").onclick=function(){ $("catchCard").classList.remove("on"); };
