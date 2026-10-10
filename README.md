@@ -40,7 +40,17 @@ no token to copy — the page fetches its own token. Add to Home Screen for full
 - English fast tier `tiny.en`, final `base.en` (chosen by WER + latency data).
 - First words ~0.8 s, final line ~1.4 s, worst (15 s run-on) ~1.8 s on synthetic clips.
 - RAM (Earshot + Ollama) ~1.85 GB. qwen2.5:1.5b only, 5-min keep-alive.
+- Far-field (synthetic -18 dB + crowd/hum noise): WER already within 0.05 of near; AGC
+  measured *worse* so it's off by default (auto input-device selection kept). Real-room
+  far-field **needs a live check**.
 - Tagalog/Arabic accuracy: **needs a live check** (no ground-truth clips).
+
+## Modes & screens
+- **Captions** full transcript · **Translate** two-language · **Listen for me** a calm
+  screen that only surfaces alert cards (your name / keywords, with the reason + time).
+- Alerts match your name (close spellings) and keywords incl. plurals/lemmas (exam→exams,
+  deadline→due), with a 30 s debounce and the reason shown.
+- Product pages built in: `/about`, `/privacy`, `/terms`, `/accessibility`, `/licenses`, `/faq`.
 
 ## Privacy
 Raw audio lives only in a 30-second RAM ring buffer — **never written to disk**. Text is
