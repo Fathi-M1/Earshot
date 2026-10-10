@@ -104,7 +104,7 @@
     <div class="langrow" id="langrow"></div>
     <div id="scroll"><div id="stack"><div id="empty">Listening. Captions appear when someone speaks.</div></div></div>
     <button id="jump">Jump to live ↓</button>
-    <div class="sizerow"><span class="aa" style="font-size:14px">A</span>
+    <div class="sizerow" id="sizerow"><span class="aa" style="font-size:14px">A</span>
       <input type="range" id="size" min="0" max="4" step="1" value="2">
       <span class="aa" style="font-size:22px">A</span></div>
     <div class="actions">
@@ -157,6 +157,21 @@
   $("jump").onclick=toLive;
   function renderStack(){
     stackEl.innerHTML="";
+    if(appMode==="ambient"){
+      // calm screen: breathing mark + Listening + moments today + alert cards only
+      var q=document.createElement("div"); q.id="empty";
+      q.innerHTML='<div style="font-size:22px;color:var(--beige);margin-bottom:6px">Listening</div>'+
+        '<div>I’ll tell you when something matters.</div>'+
+        '<div style="margin-top:10px;color:var(--sage)">'+(window._moments||0)+' moments today</div>';
+      stackEl.appendChild(q);
+      lines.filter(function(l){return l._alert;}).slice(-20).forEach(function(ln){
+        var a=document.createElement("div"); a.className="alertcard";
+        a.innerHTML='<div class="why">⋄ '+esc(ln.reasons.map(function(r){return r.reason;}).join(" · "))+'</div><div class="primary" style="font-size:calc(var(--cap)*0.8)">'+esc(ln.text)+'</div>';
+        stackEl.appendChild(a);
+      });
+      if(stick) toLive();
+      return;
+    }
     if(!lines.length){ var e=document.createElement("div"); e.id="empty"; e.textContent="Listening. Captions appear when someone speaks."; stackEl.appendChild(e); return; }
     lines.slice(-40).forEach(function(ln){
       if(ln._alert){ var a=document.createElement("div"); a.className="alertcard";
@@ -186,7 +201,10 @@
       $("muteBtn").classList.toggle("on",muted); $("muteBtn").textContent=muted?"Muted":"Mute"; return; }
     if(m.type==="appmode"){ appMode=m.app_mode; srcLang=m.src_lang||srcLang; syncControls(); return; }
     if(m.type==="conv"){ conv={their:m.their,mine:m.mine,turn:m.turn}; syncControls(); return; }
-    if(m.type==="event"&&m.kind==="alert"){ lines.push({_alert:true,reasons:m.reasons||[{reason:m.detail}],text:m.detail}); trim(); renderStack(); return; }
+    if(m.type==="event"&&m.kind==="alert"){ window._moments=(window._moments||0)+1;
+      lines.push({_alert:true,reasons:m.reasons||[{reason:m.detail}],text:m.detail}); trim(); renderStack(); return; }
+    // Listen-for-me = quiet: no scrolling transcript, only alert cards.
+    if(appMode==="ambient") return;
     if(m.type==="caption_update"){ for(var i=lines.length-1;i>=0;i--){ if(lines[i].id===m.id){
       lines[i].primary=m.primary; lines[i].secondary=m.secondary; lines[i].alert=m.alert; lines[i].pending=false; break; } } renderStack(); return; }
     if(m.type==="caption"){ if(!m.committed) return;  // partials not shown as lines (avoid flicker on phone)
@@ -220,7 +238,10 @@
   function syncControls(){
     document.querySelectorAll("[data-mode]").forEach(function(b){ b.classList.toggle("on",b.dataset.mode===appMode); });
     $("hint").textContent=HINTS[appMode]||"";
+    // hide the live caption-only chrome in Listen-for-me
+    $("sizerow").style.display = (appMode==="ambient") ? "none" : "flex";
     renderLangRow();
+    renderStack();
   }
   function renderLangRow(){
     var row=$("langrow"); row.innerHTML="";
