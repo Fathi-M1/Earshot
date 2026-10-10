@@ -513,7 +513,12 @@ class LiveController:
             self.state = "LISTENING"
             self._start_live()          # reopens the mic + worker
             self._emit({"type": "event", "kind": "mute", "detail": "off", "ts": _ms()})
-        return {"muted": self.muted, "mode": self.mode}
+            if self._loop is not None:
+                asyncio.run_coroutine_threadsafe(
+                    self.hub.publish(title=self.watch_last or "Listening", artist="", state="LISTENING"),
+                    self._loop,
+                )
+        return {"muted": self.muted, "mode": self.mode, "mic": bool(self._mic and self._mic.is_open)}
 
     # ---- catch me up ----
     def _extractive_catchup(self, recent: list[str]) -> dict:
@@ -654,7 +659,7 @@ class LiveController:
         last_published = None
         while True:
             await asyncio.sleep(config.WATCH_CHUNK_INTERVAL_S)
-            if self.mode != "live":
+            if self.mode != "live" or self.muted:
                 last_published = None
                 continue
             now = time.monotonic()

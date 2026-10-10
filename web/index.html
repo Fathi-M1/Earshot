@@ -248,8 +248,10 @@
 
   function onMsg(m){
     if(m.type==="auth"&&m.ok===false){ $("diag").textContent="⚠ "+(m.reason||"auth"); return; }
-    if(m.type==="track"){ lastState=m.state||lastState; muted=(m.state==="MUTED"); setMeta(m);
-      $("muteBtn").classList.toggle("on",muted); $("muteBtn").textContent=muted?"Paused — tap to resume":"Mute"; return; }
+    if(m.type==="event"&&m.kind==="mute"){ muted=m.detail==="on"; paintMute(); }
+    if(m.type==="track"){ lastState=m.state||lastState;
+      if(m.state==="MUTED"||m.state==="LISTENING") muted=(m.state==="MUTED");
+      setMeta(m); paintMute(); if(m.state==="MUTED"||m.state==="LISTENING") return; }
     if(m.type==="catchup"){ $("catchCard").classList.add("on"); fillCatch(m); return; }
     if(m.type==="appmode"){ appMode=m.app_mode; srcLang=m.src_lang||srcLang; syncControls(); return; }
     if(m.type==="conv"){ conv={their:m.their,mine:m.mine,turn:m.turn}; syncControls(); return; }
@@ -278,8 +280,8 @@
     var p=audio.play(); if(p&&p.catch)p.catch(showResume); audio.onpause=showResume; }
   function showResume(){ $("resume").classList.add("on"); } function hideResume(){ $("resume").classList.remove("on"); }
   function wireMS(){ if(!("mediaSession" in navigator))return;
-    navigator.mediaSession.setActionHandler("play",function(){ sendBtn(muted?"unmute":"catchup"); });
-    navigator.mediaSession.setActionHandler("pause",function(){ sendBtn("mute"); });
+    navigator.mediaSession.setActionHandler("play",function(){ if(!muted) return; muted=false; paintMute(); sendBtn("unmute"); });
+    navigator.mediaSession.setActionHandler("pause",function(){ if(muted) return; muted=true; paintMute(); sendBtn("mute"); });
     navigator.mediaSession.setActionHandler("previoustrack",function(){ sendBtn("catchup"); });
   }
   function sendBtn(a){ if(ws&&ws.readyState===1){ try{ ws.send(JSON.stringify({type:"button",action:a,source:"iphone",ts:Date.now()})); }catch(_){} } }
@@ -327,7 +329,13 @@
   $("catchBtn").onclick=function(){ showCatchSkeleton(); post("/catchup"); };
   $("ccClose").onclick=function(){ $("catchCard").classList.remove("on"); };
   $("ccHear").onclick=function(){ post("/catchup/say"); };
-  $("muteBtn").onclick=function(){ post(muted?"/unmute":"/mute"); };
+  function paintMute(){ $("muteBtn").classList.toggle("on",muted); $("muteBtn").textContent=muted?"Paused — tap to resume":"Mute"; }
+  $("muteBtn").onclick=function(){
+    muted=!muted; paintMute();
+    post(muted?"/mute":"/unmute").then(function(r){ return r.json(); }).then(function(j){
+      if(j&&typeof j.muted==="boolean"){ muted=j.muted; paintMute(); }
+    }).catch(function(){});
+  };
   // text size
   var _rafPend=false;
   function applySize(){ if(_rafPend)return; _rafPend=true; requestAnimationFrame(function(){ _rafPend=false;

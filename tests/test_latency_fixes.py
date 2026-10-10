@@ -86,6 +86,21 @@ def test_mute_stops_captions():
     assert caps_after == caps_before  # nothing new while muted
 
 
+def test_unmute_reopens_mic():
+    c = LiveController(Hub())
+    c._emit = lambda m: None
+    c.mode = "live"
+    calls = []
+    c._stop_live = lambda: calls.append("stop")
+    c._start_live = lambda: calls.append("start")
+    c._mic = _FakeMic()
+    c.mute(True)
+    assert c.muted is True and calls == ["stop"]
+    c.mute(False)
+    assert c.muted is False and c.state == "LISTENING"
+    assert calls == ["stop", "start"]
+
+
 def test_refine_latest_wins_drops_stale():
     c = LiveController(Hub())
     emitted = []

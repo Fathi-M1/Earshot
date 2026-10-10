@@ -250,17 +250,21 @@ def _laptop_page(token: str) -> str:
 </body></html>"""
 
 
-def _live_page(token: str) -> str:
-    """Dashboard live log (127.0.0.1:7777/live): captions, detected language,
-    events, and the counter/live mode toggle. Confirms capture during testing."""
+def _live_page(token: str, dev: bool = True) -> str:
+    """Laptop dashboard. At / it's the main app (dev widgets hidden); at /live the
+    developer view (counter, timings, now-playing) is shown."""
     display = brand.display_name()
+    devcss = "inline-flex" if dev else "none"
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{display} · live</title>
+<title>{display}{' · dev' if dev else ''}</title>
 <style>
   :root{{ color-scheme:dark; --fd:#12241A; --f:#1F3A24; --moss:#3D5A40; --sage:#A9B89C;
-         --beige:#DDE3D3; --needs:#C9A45C; --fern:#8FA876; --glow:#7FB3D5; }}
+         --beige:#DDE3D3; --paper:#EEF1E8; --needs:#C9A45C; --fern:#8FA876; --glow:#7FB3D5; }}
+  .devonly{{ display:{devcss} !important; }}
+  footer{{ padding:18px 20px 32px; color:var(--sage); font:400 13px/1 ui-monospace,monospace; border-top:1px solid rgba(169,184,156,.2); margin-top:24px; }}
+  footer a{{ color:var(--sage); margin-right:16px; text-decoration:none; }}
   *{{ box-sizing:border-box; }}
   body{{ margin:0; background:var(--fd); color:var(--beige);
         font-family:ui-sans-serif,system-ui,sans-serif; }}
@@ -306,14 +310,14 @@ def _live_page(token: str) -> str:
 </style></head>
 <body>
   <header>
-    <div class="mark"><div class="d"></div></div>
-    <h1>{display} · live</h1>
+    <img src="/icon-192.png" alt="" style="width:26px;height:26px;border-radius:8px">
+    <h1>{display}{' · dev' if dev else ''}</h1>
     <span class="pill" id="statePill">—</span>
     <span class="pill" id="connPill">connecting…</span>
-    <span class="pill" id="timingPill" title="partial / commit / translate latency">—</span>
+    <span class="pill devonly" id="timingPill" title="partial / commit / translate latency">—</span>
     <div class="spacer"></div>
-    <button id="counterBtn">Counter (film)</button>
-    <button id="liveBtn">Go live (mic)</button>
+    <button class="devonly" id="counterBtn">Counter (film)</button>
+    <button class="devonly" id="liveBtn">Go live (mic)</button>
   </header>
   <div class="wrap">
     <div class="card">
@@ -338,14 +342,14 @@ def _live_page(token: str) -> str:
         </div>
         <div id="recallOut" style="margin-top:10px"></div>
       </div>
-      <div class="card" style="margin-top:16px">
+      <div class="card devonly" style="margin-top:16px">
         <h2>Now playing (sent to watch / lock screen)</h2>
         <div class="np"><div class="big" id="npTitle">—</div><div class="sub" id="npArtist"></div></div>
       </div>
       <div class="card" style="margin-top:16px">
         <h2>Mode</h2>
         <div id="modeChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-          <button class="cv" data-mode="ambient">Ambient</button><button class="cv" data-mode="captions">Captions</button>
+          <button class="cv" data-mode="ambient">Listen for me</button><button class="cv" data-mode="captions">Captions</button>
           <button class="cv" data-mode="translate">Translate</button>
         </div>
         <div id="readWrap">
@@ -457,6 +461,7 @@ def _live_page(token: str) -> str:
     }} else if (m.type === 'insight'){{
       window._insights = (window._insights||[]); window._insights.push(m); renderInsights();
     }} else if (m.type === 'event'){{
+      if (m.kind === 'mute') {{ curMuted = m.detail === 'on'; syncConv(); }}
       addRow(`<div class="t">${{hhmmss(m.ts)}}</div><div class="lang">·</div>`+
              `<div class="orig">[${{m.kind}}] ${{m.detail||''}}</div>`, 'evt');
     }}
@@ -486,7 +491,7 @@ def _live_page(token: str) -> str:
     document.querySelectorAll('[data-their]').forEach(b=>b.classList.toggle('on', b.dataset.their===curConv.their));
     document.querySelectorAll('[data-mine]').forEach(b=>b.classList.toggle('on', b.dataset.mine===curConv.mine));
     document.querySelectorAll('[data-turn]').forEach(b=>b.classList.toggle('on', b.dataset.turn===curConv.turn));
-    const mb=document.getElementById('muteBtn'); mb.classList.toggle('on',curMuted); mb.textContent=curMuted?'Muted':'Mute';
+    const mb=document.getElementById('muteBtn'); mb.classList.toggle('on',curMuted); mb.textContent=curMuted?'Paused — tap to resume':'Mute';
     document.getElementById('convCard').style.display = (curMode==='translate')?'block':'none';
     document.getElementById('readWrap').style.display = (curMode==='translate')?'none':'block';
     document.getElementById('insightCard').style.display = (curMode==='ambient')?'block':'none';
@@ -512,7 +517,11 @@ def _live_page(token: str) -> str:
   document.querySelectorAll('[data-turn]').forEach(b=>b.onclick=()=>{{ post('/conv',{{turn:b.dataset.turn}}); curConv.turn=b.dataset.turn; syncConv(); }});
   document.getElementById('catchBtn').onclick=()=>post('/catchup');
   document.getElementById('insightBtn').onclick=()=>post('/insight');
-  document.getElementById('muteBtn').onclick=()=>post(curMuted?'/unmute':'/mute');
+  document.getElementById('muteBtn').onclick=async()=>{{
+    const r = await post(curMuted?'/unmute':'/mute');
+    try {{ const j = await r.json(); curMuted = !!j.muted; }} catch(_) {{ curMuted = !curMuted; }}
+    syncConv();
+  }};
   fetch('/conv').then(r=>r.json()).then(c=>{{ curConv={{their:c.their,mine:c.mine,turn:c.turn}}; curMuted=!!c.muted; curMode=c.app_mode||curMode; curRead=c.read_lang||curRead; curSrc=c.src_lang||curSrc; syncConv(); }}).catch(()=>{{}});
   fetch('/insights').then(r=>r.json()).then(j=>{{ window._insights=j.insights||[]; renderInsights(); }}).catch(()=>{{}});
 
@@ -568,6 +577,12 @@ def _live_page(token: str) -> str:
   }}
   poll();
 </script>
+<footer>
+  <a href="/about">About</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a>
+  <a href="/faq">FAQ</a><a href="/licenses">Licenses</a><a href="/accessibility">Accessibility</a>
+  <a href="/live">Developer</a>
+  <span style="margin-left:8px">· local-only · 0 bytes to the internet</span>
+</footer>
 </body></html>"""
 
 
@@ -577,13 +592,19 @@ def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[Fa
     if controller is None:
         controller = LiveController(hub)
 
+    _nocache = {"Cache-Control": "no-cache, no-store, must-revalidate"}
+
     @dash.get("/", response_class=HTMLResponse)
-    async def dash_root() -> str:
-        return _laptop_page(hub.token)
+    async def dash_root() -> HTMLResponse:
+        return HTMLResponse(_live_page(hub.token, dev=False), headers=_nocache)
 
     @dash.get("/live", response_class=HTMLResponse)
-    async def dash_live() -> str:
-        return _live_page(hub.token)
+    async def dash_live() -> HTMLResponse:
+        return HTMLResponse(_live_page(hub.token, dev=True), headers=_nocache)
+
+    @dash.get("/counter", response_class=HTMLResponse)
+    async def dash_counter() -> HTMLResponse:
+        return HTMLResponse(_laptop_page(hub.token), headers=_nocache)
 
     @dash.get("/health")
     async def health() -> JSONResponse:
