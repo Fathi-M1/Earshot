@@ -1,0 +1,7 @@
+{
+  "installCommand": "npm install --prefix landing",
+  "buildCommand": "npm run build --prefix landing",
+  "outputDirectory": "landing/dist",
+  "framework": null,
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}

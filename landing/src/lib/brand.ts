@@ -2,23 +2,22 @@ import tokens from "../../../design/tokens.json";
 
 export const brand = tokens.brand;
 
-/** Shown wherever a figure has not been measured on this laptop. */
-export const unmeasured = "—";
+// FLAG: `git remote get-url origin` failed. This repo has no remotes.
+// Replace REPO_URL with the real GitHub repository before treating these links as live.
+export const REPO_URL = "https://github.com/REPLACE_WITH_ORIGIN/earshot";
+export const githubUrl = REPO_URL;
 
-/**
- * Public repository. The docs do not name a GitHub URL yet;
- * replace this when the repo is published.
- */
-export const githubUrl = "https://github.com";
+export const contactEmail = "fatximahadpoqor1@gmail.com";
 
-export const sample = {
-  previous: "Okay class, about next Friday",
-  current: "…so the midterm covers chapters four to six",
-  alert: "Fathi, can you answer number…",
-  artist: "Your name",
-  catch1: "Midterm covers chapters four to six.",
-  catch2: "It is next Friday.",
-  quote: "the midterm covers chapters four to six",
-  clock: "09:41",
-  when: "Saturday, October 10",
-};
+export const captions = [
+  "Boarding for flight 5J 812 now at gate\u00A014.",
+  "Lilipat ang meeting sa Lunes ng alas-diyes.",
+  "الاجتماع يوم الاثنين الساعة العاشرة",
+  "Fathi, can you take the next point?",
+];
+
+export const languages = [
+  { code: "EN", line: "Next station, Ayala.", dir: "ltr" as const },
+  { code: "TL", line: "Saan ang gate natin?", dir: "ltr" as const },
+  { code: "AR", line: "الرحلة متأخرة نصف ساعة", dir: "rtl" as const },
+];
