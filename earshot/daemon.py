@@ -690,6 +690,9 @@ def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[Fa
     async def _session_end() -> JSONResponse:
         return JSONResponse(await run_in_threadpool(controller.end_session))
 
+    async def _wipe() -> JSONResponse:
+        return JSONResponse(await run_in_threadpool(controller.wipe))
+
     async def _sessions() -> JSONResponse:
         from . import notes
 
@@ -729,6 +732,7 @@ def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[Fa
         app.add_api_route("/settings", _get_settings, methods=["GET"])
         app.add_api_route("/settings", _post_settings, methods=["POST"])
         app.add_api_route("/session/end", _session_end, methods=["POST"])
+        app.add_api_route("/wipe", _wipe, methods=["POST"])
         app.add_api_route("/sessions", _sessions, methods=["GET"])
         app.add_api_route("/session/ics", _session_ics, methods=["GET"])
         app.add_api_route("/mute", _mute, methods=["POST"])

@@ -70,15 +70,26 @@
   .act{ flex:1; height:54px; border-radius:13px; border:1px solid rgba(169,184,156,.4); background:transparent; color:var(--beige); font-size:16px; font-weight:600; }
   .act.primary{ background:var(--beige); color:var(--fd); border-color:var(--beige); }
   .act.on{ background:var(--moss); }
-  /* settings sheet */
-  #sheet{ position:fixed; inset:0; background:rgba(18,36,26,.96); display:none; flex-direction:column;
-          padding:calc(18px + env(safe-area-inset-top)) 20px calc(18px + env(safe-area-inset-bottom)); overflow-y:auto; gap:14px; }
+  /* settings sheet — solid beige surface, dark forest text */
+  #sheet{ position:fixed; inset:0; background:var(--paper); color:var(--fd); display:none; flex-direction:column;
+          padding:calc(18px + env(safe-area-inset-top)) 20px calc(18px + env(safe-area-inset-bottom)); overflow-y:auto; gap:12px; }
   #sheet.on{ display:flex; }
-  #sheet h2{ font-size:20px; margin:0; }
-  #sheet label{ font:400 12px/1 ui-monospace,monospace; text-transform:uppercase; color:var(--sage); display:block; margin-bottom:6px; }
-  #sheet input,#sheet select{ width:100%; height:44px; border-radius:10px; border:1px solid rgba(169,184,156,.4); background:var(--fd); color:var(--beige); padding:0 12px; font-size:15px; }
-  #sheet .qr{ width:160px; height:160px; border-radius:12px; background:var(--paper); align-self:center; }
+  #sheet h2{ font-size:22px; margin:0; color:var(--fd); }
+  #sheet .grp{ font:600 12px/1 ui-monospace,monospace; text-transform:uppercase; letter-spacing:.08em; color:var(--moss); margin:18px 0 2px; }
+  #sheet label{ font-size:13px; color:var(--moss); display:block; margin-bottom:4px; }
+  #sheet input,#sheet select{ width:100%; height:44px; border-radius:10px; border:1px solid var(--moss); background:#fff; color:var(--fd); padding:0 12px; font-size:15px; }
   #sheet .row{ display:flex; gap:10px; }
+  #sheet .doc{ display:flex; justify-content:space-between; align-items:center; padding:12px 2px; border-bottom:1px solid rgba(61,90,64,.2); font-size:16px; color:var(--fd); cursor:pointer; }
+  #sheet .doc::after{ content:"›"; color:var(--moss); }
+  #sheet .kwchip{ display:inline-flex; align-items:center; gap:6px; background:var(--forest); color:var(--beige); border-radius:999px; padding:6px 10px; font-size:14px; margin:0 6px 6px 0; }
+  #sheet .kwchip b{ cursor:pointer; opacity:.7; }
+  #sheet button.sav{ background:var(--forest); color:var(--beige); border:0; border-radius:10px; height:44px; font-weight:600; }
+  #sheet button.danger{ background:#C47A62; color:#fff; border:0; border-radius:10px; height:44px; font-weight:600; }
+  #sheet .ver{ margin-top:auto; color:var(--moss); font:400 11px/1.4 ui-monospace,monospace; padding-top:16px; }
+  #docsheet{ position:fixed; inset:0; background:var(--fd); display:none; flex-direction:column; z-index:5; }
+  #docsheet.on{ display:flex; }
+  #docsheet .bar{ display:flex; align-items:center; gap:10px; padding:calc(10px + env(safe-area-inset-top)) 14px 8px; }
+  #docsheet iframe{ flex:1; border:0; width:100%; background:var(--fd); }
   #resume{ position:fixed; inset:0; background:rgba(18,36,26,.94); display:none; align-items:center; justify-content:center; flex-direction:column; gap:12px; }
   #resume.on{ display:flex; }
   #resume button{ height:54px; padding:0 28px; border-radius:14px; border:0; background:var(--beige); color:var(--fd); font-size:17px; font-weight:600; }
@@ -101,9 +112,9 @@
 </head>
 <body>
   <div id="start" class="screen on">
-    <div class="mark"><div class="dot"></div></div>
-    <h1><span id="brand-start">…</span></h1>
-    <p class="muted">Add to Home Screen for full-screen captions, or keep this Safari tab open.</p>
+    <img src="/icon-512.png" alt="Earshot" style="width:84px;height:84px;border-radius:22px">
+    <h1 id="brand-start">Earshot</h1>
+    <p class="muted">Every word, within earshot.</p>
     <button class="start" id="startBtn">Start</button>
   </div>
 
@@ -120,9 +131,9 @@
     <div class="langrow" id="langrow"></div>
     <div id="scroll"><div id="stack"><div id="empty">Listening. Captions appear when someone speaks.</div></div></div>
     <button id="jump">Jump to live ↓</button>
-    <div class="sizerow" id="sizerow"><span class="aa" style="font-size:14px">A</span>
-      <input type="range" id="size" min="0" max="4" step="1" value="2">
-      <span class="aa" style="font-size:22px">A</span></div>
+    <div class="sizerow" id="sizerow"><span class="aa" style="font-size:13px">Aa</span>
+      <input type="range" id="size" min="18" max="56" step="1" value="28">
+      <span class="aa" style="font-size:22px">Aa</span></div>
     <div class="actions">
       <button class="act primary" id="catchBtn">Catch me up</button>
       <button class="act" id="muteBtn">Mute</button>
@@ -131,19 +142,37 @@
 
   <div id="sheet">
     <div style="display:flex;align-items:center;justify-content:space-between">
-      <h2>Settings</h2><button class="gear" id="closeSheet">✕</button></div>
-    <div><label>Your name (for alerts)</label><input id="setName" placeholder="Fathi"></div>
-    <div><label>Alert keywords (comma-separated)</label><input id="setKw" placeholder="quiz, deadline, exam, midterm"></div>
+      <h2>Settings</h2><button class="gear" id="closeSheet" style="border-color:var(--moss);color:var(--fd)">✕</button></div>
+
+    <div class="grp">Alerts</div>
+    <div><label>Your name</label><input id="setName" placeholder="Fathi"></div>
+    <div><label>Keywords</label><div id="kwChips"></div>
+      <input id="kwAdd" placeholder="add a keyword, press Enter"></div>
+
+    <div class="grp">Sessions</div>
+    <div id="sessList" style="font-size:15px;color:var(--fd)"></div>
+    <div class="row"><button class="sav" id="endBtn" style="flex:1">End &amp; save today's session</button></div>
+
+    <div class="grp">Privacy</div>
     <div><label>Keep text for</label>
       <select id="setExpire"><option value="1h">1 hour</option><option value="24h">24 hours</option><option value="7d">7 days</option><option value="keep">Keep</option></select></div>
-    <div class="row"><button class="act primary" id="saveSet" style="flex:1">Save</button></div>
-    <div><label>Recall — search today</label>
-      <div class="row"><input id="recallQ" placeholder="what about the deadline?"><button class="act" id="recallBtn" style="flex:0 0 90px">Ask</button></div>
-      <div id="recallOut" style="margin-top:8px;color:var(--sage);font-size:14px"></div></div>
-    <div class="row"><button class="act" id="insightBtn" style="flex:1">Insight now</button>
-      <button class="act" id="endBtn" style="flex:1">End session</button></div>
-    <div><label>Pair a phone</label><img class="qr" src="/qr.png" alt="QR"></div>
-    <div style="color:var(--moss);font:400 11px/1.4 ui-monospace,monospace" id="diag"></div>
+    <div class="row"><button class="sav" id="saveSet" style="flex:1">Save settings</button>
+      <button class="danger" id="wipeBtn" style="flex:1">Delete everything</button></div>
+
+    <div class="grp">About</div>
+    <div class="doc" data-doc="about">How it works</div>
+    <div class="doc" data-doc="privacy">Privacy Policy</div>
+    <div class="doc" data-doc="terms">Terms of Use</div>
+    <div class="doc" data-doc="accessibility">Accessibility</div>
+    <div class="doc" data-doc="licenses">Open-source licenses</div>
+    <div class="doc" data-doc="faq">FAQ</div>
+
+    <div class="ver" id="ver">Earshot</div>
+  </div>
+
+  <div id="docsheet">
+    <div class="bar"><button class="gear" id="docBack">‹</button><span id="docTitle" style="color:var(--beige)"></span></div>
+    <iframe id="docframe" title="doc"></iframe>
   </div>
 
   <div id="catchCard">
@@ -160,12 +189,12 @@
   var qs=new URLSearchParams(location.search), token=qs.get("t")||"", display="Earshot";
   var audio=null, ws=null, backoff=500, lastState="LISTENING", wakeLock=null, stick=true, muted=false;
   var appMode="ambient", srcLang="en", conv={their:"ar",mine:"en",turn:"them"};
-  var lines=[], sizes=[16,20,26,32,40];
+  var lines=[];
   var HINTS={captions:"Every word, as it's said.", translate:"Two people, two languages.",
              ambient:"Stays quiet. Tells you when it matters."};
 
   var cfgReady=fetch("/config").then(r=>r.json()).then(c=>{ display=c.displayName; if(c.token)token=c.token;
-    document.getElementById("brand-start").textContent=display+" remote"; document.title=display; }).catch(()=>{});
+    document.getElementById("brand-start").textContent=display; document.title=display; }).catch(()=>{});
 
   function $(id){ return document.getElementById(id); }
   function esc(s){ return (s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
@@ -300,23 +329,33 @@
   $("ccHear").onclick=function(){ post("/catchup/say"); };
   $("muteBtn").onclick=function(){ post(muted?"/unmute":"/mute"); };
   // text size
-  function applySize(){ document.documentElement.style.setProperty("--cap", sizes[$("size").value]+"px"); localStorage.setItem("capSize",$("size").value); }
-  $("size").addEventListener("input",applySize);
+  var _rafPend=false;
+  function applySize(){ if(_rafPend)return; _rafPend=true; requestAnimationFrame(function(){ _rafPend=false;
+    document.documentElement.style.setProperty("--cap", $("size").value+"px"); }); }
+  $("size").addEventListener("input", applySize);               // instant, rAF, no re-render
+  $("size").addEventListener("change", function(){ localStorage.setItem("capSize", $("size").value); });  // persist once
   var savedSize=localStorage.getItem("capSize"); if(savedSize!==null){ $("size").value=savedSize; } applySize();
   // settings sheet
-  $("gearBtn").onclick=function(){ loadSettings(); diag(); $("sheet").classList.add("on"); };
-  $("closeSheet").onclick=function(){ $("sheet").classList.remove("on"); };
+  var kw=[];
+  function renderKw(){ var el=$("kwChips"); el.innerHTML=kw.map(function(k,i){
+    return '<span class="kwchip">'+esc(k)+' <b data-i="'+i+'">✕</b></span>'; }).join("");
+    el.querySelectorAll("b").forEach(function(b){ b.onclick=function(){ kw.splice(+b.dataset.i,1); renderKw(); }; }); }
+  $("kwAdd").addEventListener("keydown",function(e){ if(e.key==="Enter"){ var v=e.target.value.trim(); if(v){ kw.push(v); e.target.value=""; renderKw(); } e.preventDefault(); } });
   function loadSettings(){ fetch("/settings").then(r=>r.json()).then(function(s){
-    $("setName").value=s.name||""; $("setKw").value=(s.keywords||[]).join(", "); $("setExpire").value=s.auto_expire||"24h"; }).catch(()=>{}); }
-  $("saveSet").onclick=function(){ post("/settings",{name:$("setName").value,keywords:$("setKw").value,auto_expire:$("setExpire").value})
-    .then(()=>{ $("closeSheet").click(); }); };
-  $("recallBtn").onclick=function(){ var q=$("recallQ").value.trim(); if(!q)return; $("recallOut").textContent="searching…";
-    fetch("/recall?q="+encodeURIComponent(q)).then(r=>r.json()).then(function(r){
-      $("recallOut").innerHTML="<b>"+esc(r.answer||"")+"</b>"+(r.results||[]).map(function(x){return "<div>"+esc(x.text)+"</div>";}).join(""); }).catch(()=>{ $("recallOut").textContent="error"; }); };
-  $("insightBtn").onclick=function(){ post("/insight"); $("closeSheet").click(); };
-  $("endBtn").onclick=function(){ post("/session/end"); $("closeSheet").click(); };
-  function diag(){ var sa=(window.navigator.standalone===true)||(window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches);
-    $("diag").textContent=(sa?"standalone":"tab")+" · MS:"+(("mediaSession" in navigator)?"y":"n")+" · t:"+(token||"").slice(0,4); }
+    $("setName").value=s.name||""; kw=(s.keywords||[]).slice(); renderKw(); $("setExpire").value=s.auto_expire||"24h"; }).catch(()=>{}); }
+  function loadSessions(){ fetch("/sessions").then(r=>r.json()).then(function(j){
+    $("sessList").innerHTML=(j.sessions||[]).length? j.sessions.map(function(s){
+      return '<div class="doc" onclick="window.open(\'/session/ics?session='+encodeURIComponent(s.session)+'\')">'+esc(s.session)+'</div>'; }).join("")
+      : '<div style="color:var(--moss)">No saved sessions yet.</div>'; }).catch(()=>{}); }
+  $("gearBtn").onclick=function(){ loadSettings(); loadSessions(); $("ver").textContent="Earshot · "+appMode+" · local-only, 0 bytes to the internet"; $("sheet").classList.add("on"); };
+  $("closeSheet").onclick=function(){ $("sheet").classList.remove("on"); };
+  $("saveSet").onclick=function(){ post("/settings",{name:$("setName").value,keywords:kw,auto_expire:$("setExpire").value}).then(()=>{ $("closeSheet").click(); }); };
+  $("endBtn").onclick=function(){ post("/session/end").then(loadSessions); };
+  $("wipeBtn").onclick=function(){ if(confirm("Delete all stored text? This cannot be undone.")) post("/wipe"); };
+  // in-app doc sheets (About rows -> /about /privacy ...)
+  document.querySelectorAll(".doc[data-doc]").forEach(function(d){ d.onclick=function(){
+    $("docframe").src="/"+d.dataset.doc; $("docTitle").textContent=d.textContent; $("docsheet").classList.add("on"); }; });
+  $("docBack").onclick=function(){ $("docsheet").classList.remove("on"); $("docframe").src="about:blank"; };
   function fetchState(){ fetch("/conv").then(r=>r.json()).then(function(c){ conv={their:c.their,mine:c.mine,turn:c.turn};
     appMode=c.app_mode||appMode; srcLang=c.src_lang||srcLang; muted=!!c.muted; syncControls(); }).catch(()=>{}); }
 

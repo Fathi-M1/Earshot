@@ -580,6 +580,22 @@ class LiveController:
         voice.speak(f"In the last five minutes. {c.get('line1','')}. {c.get('line2','')}")
         return {"ok": True}
 
+    def wipe(self) -> dict:
+        """Delete everything stored (text only; audio was never stored)."""
+        self.history.clear(); self.insights.clear(); self._pending_recall.clear()
+        try:
+            import os
+            from .recall import _db_path
+            self.recall.close()
+            p = _db_path()
+            if os.path.exists(p):
+                os.remove(p)
+        except Exception:
+            pass
+        self.recall = recall.Recall()
+        self._emit({"type": "event", "kind": "wiped", "detail": "all text deleted", "ts": _ms()})
+        return {"ok": True}
+
     # ---- session notes ----
     def end_session(self) -> dict:
         from . import notes
