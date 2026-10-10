@@ -708,6 +708,9 @@ def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[Fa
     async def _catchup() -> JSONResponse:
         return JSONResponse(await run_in_threadpool(controller.catch_up))
 
+    async def _catchup_say() -> JSONResponse:
+        return JSONResponse(await run_in_threadpool(controller.say_catchup))
+
     async def _mute() -> JSONResponse:
         return JSONResponse(await run_in_threadpool(controller.mute, True))
 
@@ -719,6 +722,7 @@ def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[Fa
         app.add_api_route("/conv", _get_conv, methods=["GET"])
         app.add_api_route("/appmode", _appmode, methods=["POST"])
         app.add_api_route("/catchup", _catchup, methods=["POST"])
+        app.add_api_route("/catchup/say", _catchup_say, methods=["POST"])
         app.add_api_route("/insight", _insight, methods=["POST"])
         app.add_api_route("/insights", _insights, methods=["GET"])
         app.add_api_route("/recall", _recall, methods=["GET"])

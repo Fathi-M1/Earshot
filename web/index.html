@@ -84,6 +84,19 @@
   #resume button{ height:54px; padding:0 28px; border-radius:14px; border:0; background:var(--beige); color:var(--fd); font-size:17px; font-weight:600; }
   .cdot{ width:8px;height:8px;border-radius:50%;background:var(--needs);display:inline-block;margin-right:6px;vertical-align:middle }
   .cdot.live{ background:var(--fern); }
+  /* catch-up card */
+  #catchCard{ position:fixed; left:14px; right:14px; bottom:calc(74px + env(safe-area-inset-bottom)); display:none;
+              background:var(--paper); color:var(--fd); border-radius:16px; padding:14px 16px; box-shadow:0 10px 30px rgba(0,0,0,.4); }
+  #catchCard.on{ display:block; }
+  .cc-head{ display:flex; justify-content:space-between; font:400 11px/1 ui-monospace,monospace; text-transform:uppercase; color:var(--moss); margin-bottom:8px; }
+  .cc-head button{ border:0; background:transparent; color:var(--moss); font-size:16px; }
+  #ccBody{ font-size:18px; font-weight:600; line-height:1.3; min-height:2.2em; }
+  #ccBody .l2{ font-weight:400; color:var(--moss); }
+  .sk{ height:16px; background:linear-gradient(90deg,#cdd6c2,#e8ecdf,#cdd6c2); background-size:200% 100%;
+       border-radius:6px; margin:6px 0; animation:sh 1.1s infinite; }
+  @keyframes sh{ 0%{background-position:200% 0}100%{background-position:-200% 0} }
+  .cc-foot{ display:flex; justify-content:space-between; align-items:center; margin-top:10px; }
+  .cc-foot button{ border:1px solid var(--moss); background:transparent; color:var(--fd); border-radius:10px; padding:8px 14px; font-weight:600; }
 </style>
 </head>
 <body>
@@ -131,6 +144,12 @@
       <button class="act" id="endBtn" style="flex:1">End session</button></div>
     <div><label>Pair a phone</label><img class="qr" src="/qr.png" alt="QR"></div>
     <div style="color:var(--moss);font:400 11px/1.4 ui-monospace,monospace" id="diag"></div>
+  </div>
+
+  <div id="catchCard">
+    <div class="cc-head"><span>Catch me up</span><button id="ccClose">✕</button></div>
+    <div id="ccBody"><div class="sk"></div><div class="sk" style="width:70%"></div></div>
+    <div class="cc-foot"><span id="ccSrc" class="muted"></span><button id="ccHear">Hear it</button></div>
   </div>
 
   <div id="resume"><p class="muted">Audio session stopped.</p><button id="resumeBtn">Tap to resume</button></div>
@@ -202,6 +221,7 @@
     if(m.type==="auth"&&m.ok===false){ $("diag").textContent="⚠ "+(m.reason||"auth"); return; }
     if(m.type==="track"){ lastState=m.state||lastState; muted=(m.state==="MUTED"); setMeta(m);
       $("muteBtn").classList.toggle("on",muted); $("muteBtn").textContent=muted?"Paused — tap to resume":"Mute"; return; }
+    if(m.type==="catchup"){ $("catchCard").classList.add("on"); fillCatch(m); return; }
     if(m.type==="appmode"){ appMode=m.app_mode; srcLang=m.src_lang||srcLang; syncControls(); return; }
     if(m.type==="conv"){ conv={their:m.their,mine:m.mine,turn:m.turn}; syncControls(); return; }
     if(m.type==="event"&&m.kind==="alert"){ window._moments=(window._moments||0)+1;
@@ -271,7 +291,13 @@
     }
   }
   document.querySelectorAll("[data-mode]").forEach(function(b){ b.onclick=function(){ post("/appmode",{app_mode:b.dataset.mode}); appMode=b.dataset.mode; syncControls(); }; });
-  $("catchBtn").onclick=function(){ post("/catchup"); };
+  function showCatchSkeleton(){ $("ccBody").innerHTML='<div class="sk"></div><div class="sk" style="width:70%"></div>';
+    $("ccSrc").textContent=""; $("catchCard").classList.add("on"); }
+  function fillCatch(m){ $("ccBody").innerHTML='<div>'+esc(m.line1||"")+'</div>'+(m.line2?'<div class="l2">'+esc(m.line2)+'</div>':"");
+    $("ccSrc").textContent=(m.source==="llm"?("summary · "+(m.ms||"")+"ms"):"quick recap"); }
+  $("catchBtn").onclick=function(){ showCatchSkeleton(); post("/catchup"); };
+  $("ccClose").onclick=function(){ $("catchCard").classList.remove("on"); };
+  $("ccHear").onclick=function(){ post("/catchup/say"); };
   $("muteBtn").onclick=function(){ post(muted?"/unmute":"/mute"); };
   // text size
   function applySize(){ document.documentElement.style.setProperty("--cap", sizes[$("size").value]+"px"); localStorage.setItem("capSize",$("size").value); }

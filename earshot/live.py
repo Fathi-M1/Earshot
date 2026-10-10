@@ -104,6 +104,7 @@ class LiveController:
         self._alert_cooldown: dict[str, float] = {}
         self._last_commit_mono = 0.0
         self.insights: list[dict] = []   # ambient INSIGHT CARDS
+        self._last_catchup: dict | None = None
         self.recall = recall.Recall()    # semantic search over today's lines
 
     def attach_loop(self, loop: asyncio.AbstractEventLoop) -> None:
@@ -515,57 +516,69 @@ class LiveController:
         return {"muted": self.muted, "mode": self.mode}
 
     # ---- catch me up ----
+    def _extractive_catchup(self, recent: list[str]) -> dict:
+        """Instant, no-LLM recap: the last couple of committed lines."""
+        if not recent:
+            return {"line1": "Nothing to catch up on yet.", "line2": "", "source": "extractive"}
+        tail = recent[-2:]
+        return {
+            "line1": tail[-1][:60],
+            "line2": (tail[-2][:60] if len(tail) > 1 else "(quick recap)"),
+            "source": "extractive",
+        }
+
     def catch_up(self) -> dict:
+        cid = f"cu{_ms()}"
         cutoff = time.time() - config.CATCHUP_MINUTES * 60
         recent = [t for (ts, t) in self.history if ts >= cutoff and t]
+        # 1) instant extractive card (never blocks; no voice)
+        extract = self._extractive_catchup(recent)
+        self._emit_catchup(cid, extract, ms=None)
         if not recent:
-            summary = {"line1": "Nothing to catch up on yet.", "line2": "", "source": "empty"}
-            self._announce_catchup(summary)
-            return summary
+            self._last_catchup = {"id": cid, **extract}
+            return {"id": cid, **extract, "ms": 0}
+        # 2) LLM summary, then replace the card in place
         words: list[str] = []
-        for line in reversed(recent):  # newest first, cap words
+        for line in reversed(recent):
             words = line.split() + words
             if len(words) >= config.CATCHUP_MAX_WORDS:
                 break
         transcript = " ".join(words[-config.CATCHUP_MAX_WORDS:])
-        schema = {
-            "type": "object",
-            "properties": {
-                "line1": {"type": "string", "maxLength": 60},
-                "line2": {"type": "string", "maxLength": 60},
-                "important": {"type": "boolean"},
-            },
-            "required": ["line1", "line2", "important"],
-        }
-        system = (
-            "Summarize what the listener missed in exactly two short lines, max 60 "
-            "characters each, plain words, using only facts in the transcript. Mention "
-            "deadlines, names and numbers exactly as said. If nothing important was said, say so."
-        )
+        schema = {"type": "object", "properties": {
+            "line1": {"type": "string", "maxLength": 60}, "line2": {"type": "string", "maxLength": 60},
+            "important": {"type": "boolean"}}, "required": ["line1", "line2", "important"]}
+        system = ("Summarize what the listener missed in exactly two short lines, max 60 "
+                  "characters each, plain words, using only facts in the transcript. Mention "
+                  "deadlines, names and numbers exactly as said. If nothing important was said, say so.")
+        t0 = time.perf_counter()
         out = llm.chat_json(config.CATCHUP_MODEL, system, transcript, schema, timeout=config.CATCHUP_TIMEOUT)
+        ms = int((time.perf_counter() - t0) * 1000)
         if out and (out.get("line1") or out.get("line2")):
             summary = {"line1": out.get("line1", ""), "line2": out.get("line2", ""), "source": "llm"}
+            self._emit_catchup(cid, summary, ms=ms)
         else:
-            # extractive fallback: the last couple of committed lines
-            tail = recent[-2:]
-            summary = {
-                "line1": tail[-1][:60] if tail else "",
-                "line2": (tail[-2][:60] if len(tail) > 1 else "(quick recap — no summary)"),
-                "source": "extractive",
-            }
-        self._announce_catchup(summary)
-        return summary
+            summary = extract  # keep the extractive card
+        self._last_catchup = {"id": cid, **summary}
+        self.timing["catchup_ms"] = ms
+        return {"id": cid, **summary, "ms": ms}
 
-    def _announce_catchup(self, summary: dict) -> None:
+    def _emit_catchup(self, cid: str, summary: dict, ms: int | None) -> None:
+        # text card only — NO voice (Piper plays only on explicit "Hear it")
         if self._loop is not None:
             asyncio.run_coroutine_threadsafe(
                 self.hub.publish(title=summary["line1"], artist=summary["line2"], state="CATCH_UP"),
                 self._loop,
             )
-        self._emit({"type": "event", "kind": "catchup", "detail": summary["source"],
-                    "line1": summary["line1"], "line2": summary["line2"], "ts": _ms()})
-        spoken = f"In the last five minutes. {summary['line1']}. {summary['line2']}"
-        voice.speak(spoken)
+        self._emit({"type": "catchup", "id": cid, "line1": summary["line1"],
+                    "line2": summary["line2"], "source": summary["source"], "ms": ms, "ts": _ms()})
+
+    def say_catchup(self) -> dict:
+        """Speak the last catch-up via Piper — only when the user taps 'Hear it'."""
+        c = getattr(self, "_last_catchup", None)
+        if not c:
+            return {"ok": False}
+        voice.speak(f"In the last five minutes. {c.get('line1','')}. {c.get('line2','')}")
+        return {"ok": True}
 
     # ---- session notes ----
     def end_session(self) -> dict:
