@@ -201,7 +201,7 @@
   function onMsg(m){
     if(m.type==="auth"&&m.ok===false){ $("diag").textContent="⚠ "+(m.reason||"auth"); return; }
     if(m.type==="track"){ lastState=m.state||lastState; muted=(m.state==="MUTED"); setMeta(m);
-      $("muteBtn").classList.toggle("on",muted); $("muteBtn").textContent=muted?"Muted":"Mute"; return; }
+      $("muteBtn").classList.toggle("on",muted); $("muteBtn").textContent=muted?"Paused — tap to resume":"Mute"; return; }
     if(m.type==="appmode"){ appMode=m.app_mode; srcLang=m.src_lang||srcLang; syncControls(); return; }
     if(m.type==="conv"){ conv={their:m.their,mine:m.mine,turn:m.turn}; syncControls(); return; }
     if(m.type==="event"&&m.kind==="alert"){ window._moments=(window._moments||0)+1;

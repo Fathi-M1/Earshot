@@ -186,12 +186,12 @@ class LiveController:
 
     def _stop_live(self) -> None:
         self._stop.set()
+        if self._mic is not None:
+            self._mic.close()   # stop capture FIRST (<300 ms), before joining the worker
+            self._mic = None
         if self._thread is not None:
             self._thread.join(timeout=3.0)
             self._thread = None
-        if self._mic is not None:
-            self._mic.close()
-            self._mic = None
 
     def _recall_worker(self) -> None:
         """Embed committed lines for recall ONLY when idle > IDLE_SECONDS (never
@@ -347,7 +347,7 @@ class LiveController:
         return text
 
     def _commit(self, now: float, utt_start: float, utt_lang: str | None, forced: bool = False) -> None:
-        if self._mic is None:
+        if self._mic is None or self.muted:   # muted: emit nothing
             return
         if (now - utt_start) < config.MIN_SEGMENT_S:  # drop sub-0.6s blips
             return
@@ -389,7 +389,7 @@ class LiveController:
 
     def _refine(self, samples, lang: str, original_fast: str, cid: int, ctx: dict) -> None:
         t0 = time.perf_counter()
-        if cid != self._refine_gen:  # a newer line already committed — drop this one
+        if cid != self._refine_gen or self.muted:  # stale or muted — drop
             return
         # Re-transcribe with the final model (en: base.en, tl/ar: small). Skip when
         # the final model == the fast model (nothing to gain).
@@ -498,13 +498,13 @@ class LiveController:
         if self.mode != "live":
             return {"muted": self.muted, "mode": self.mode}
         if muted and not self.muted:
-            self._stop_live()          # closes the mic immediately
-            self.muted = True
+            self.muted = True          # guard: in-flight commit/refine stop emitting now
+            self._stop_live()          # closes the mic FIRST (<300 ms)
             self.state = "MUTED"
             self._emit({"type": "event", "kind": "mute", "detail": "on", "ts": _ms()})
             if self._loop is not None:
                 asyncio.run_coroutine_threadsafe(
-                    self.hub.publish(title="Muted · not listening", artist="", state="MUTED"),
+                    self.hub.publish(title="Paused — tap to resume", artist="", state="MUTED"),
                     self._loop,
                 )
         elif not muted and self.muted:

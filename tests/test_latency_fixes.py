@@ -62,6 +62,30 @@ def test_translate_mode_has_translation_and_speaker():
     assert primary["text"] == "hello" and secondary["text"] == "مرحبا"
 
 
+class _FakeMic:
+    is_open = True
+    def snapshot(self, s):
+        import numpy as np
+        return np.zeros(int(s * 16000), dtype="float32")
+    def close(self):
+        self.is_open = False
+
+
+def test_mute_stops_captions():
+    c = LiveController(Hub())
+    emitted = []
+    c._emit = lambda m: emitted.append(m)
+    c.mode = "live"; c._mic = _FakeMic(); c._thread = None; c.muted = False
+    c.mute(True)
+    assert c.muted is True and c.state == "MUTED"
+    # a commit attempt while muted must emit ZERO captions
+    caps_before = sum(1 for m in emitted if m.get("type") in ("caption", "caption_update"))
+    c._mic = _FakeMic()  # pretend audio is flowing again
+    c._commit(2.0, 0.0, "en")
+    caps_after = sum(1 for m in emitted if m.get("type") in ("caption", "caption_update"))
+    assert caps_after == caps_before  # nothing new while muted
+
+
 def test_refine_latest_wins_drops_stale():
     c = LiveController(Hub())
     emitted = []
