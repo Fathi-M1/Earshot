@@ -40,8 +40,11 @@
   .seg button.on{ background:var(--beige); color:var(--fd); }
   .gear{ width:40px; height:40px; border-radius:11px; border:1px solid rgba(169,184,156,.4); background:transparent; color:var(--beige); font-size:18px; }
   .hint{ flex:0 0 auto; color:var(--sage); font-size:13px; padding:0 16px 6px; }
-  .langrow{ flex:0 0 auto; display:flex; gap:6px; padding:0 14px 8px; flex-wrap:wrap; align-items:center; }
-  .langrow .lbl{ font:400 11px/1 ui-monospace,monospace; text-transform:uppercase; color:var(--sage); }
+  .langrow{ flex:0 0 auto; display:flex; flex-direction:column; gap:4px; padding:0 14px 8px; }
+  .plabel{ font:400 11px/1 ui-monospace,monospace; text-transform:uppercase; color:var(--sage); margin:6px 0 2px; }
+  .seg2{ display:flex; width:100%; background:var(--forest); border-radius:11px; padding:3px; gap:0; }
+  .seg2 button{ flex:1 1 0; border:0; background:transparent; color:var(--sage); font-size:14px; font-weight:600; padding:9px 0; border-radius:8px; }
+  .seg2 button.on{ background:var(--beige); color:var(--fd); }
   .chip{ border:1px solid rgba(169,184,156,.4); border-radius:9px; padding:7px 11px; font-size:14px; background:transparent; color:var(--beige); }
   .chip.on{ background:var(--moss); border-color:var(--moss); }
   #scroll{ flex:1 1 auto; overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain;
@@ -245,16 +248,26 @@
   }
   function renderLangRow(){
     var row=$("langrow"); row.innerHTML="";
-    function chips(lbl, cur, key){ var span=document.createElement("span"); span.className="lbl"; span.textContent=lbl; row.appendChild(span);
-      [["en","English"],["tl","Tagalog"],["ar","Arabic"]].forEach(function(p){ var b=document.createElement("button");
-        b.className="chip"+(cur===p[0]?" on":""); b.textContent=p[1]; b.onclick=function(){ key(p[0]); }; row.appendChild(b); }); }
+    var LANGS=[["en","English"],["tl","Tagalog"],["ar","Arabic"]];
+    function segRow(lbl, cur, pick){
+      var l=document.createElement("div"); l.className="plabel"; l.textContent=lbl; row.appendChild(l);
+      var seg=document.createElement("div"); seg.className="seg2";
+      LANGS.forEach(function(p){ var b=document.createElement("button");
+        b.className=(cur===p[0]?"on":""); b.textContent=p[1]; b.onclick=function(){ pick(p[0]); }; seg.appendChild(b); });
+      row.appendChild(seg);
+    }
     if(appMode==="translate"){
-      chips("They speak", conv.their, function(l){ post("/conv",{their:l}); conv.their=l; syncControls(); });
-      chips("I read", conv.mine, function(l){ post("/conv",{mine:l}); conv.mine=l; syncControls(); });
-      var t=document.createElement("button"); t.className="chip"+(conv.turn!=="me"?" on":""); t.textContent=conv.turn==="me"?"My turn":"Their turn";
-      t.onclick=function(){ var nt=conv.turn==="me"?"them":"me"; post("/conv",{turn:nt}); conv.turn=nt; syncControls(); }; row.appendChild(t);
+      segRow("They speak", conv.their, function(l){ post("/conv",{their:l}); conv.their=l; syncControls(); });
+      segRow("I read", conv.mine, function(l){ post("/conv",{mine:l}); conv.mine=l; syncControls(); });
+      // turn as its own toggle row
+      var tl=document.createElement("div"); tl.className="plabel"; tl.textContent="Whose turn"; row.appendChild(tl);
+      var seg=document.createElement("div"); seg.className="seg2";
+      [["them","Their turn"],["me","My turn"]].forEach(function(p){ var b=document.createElement("button");
+        b.className=(conv.turn===p[0]?"on":""); b.textContent=p[1];
+        b.onclick=function(){ post("/conv",{turn:p[0]}); conv.turn=p[0]; syncControls(); }; seg.appendChild(b); });
+      row.appendChild(seg);
     } else {
-      chips("Spoken", srcLang, function(l){ post("/appmode",{src_lang:l}); srcLang=l; syncControls(); });
+      segRow("Spoken", srcLang, function(l){ post("/appmode",{src_lang:l}); srcLang=l; syncControls(); });
     }
   }
   document.querySelectorAll("[data-mode]").forEach(function(b){ b.onclick=function(){ post("/appmode",{app_mode:b.dataset.mode}); appMode=b.dataset.mode; syncControls(); }; });
