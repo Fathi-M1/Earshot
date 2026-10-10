@@ -36,3 +36,25 @@ def test_keyword_exact_only():
 def test_reason_carries_matched_word():
     hits = alerts.check("the deadline is near", NAMES, KW)
     assert hits[0].reason == "Keyword: deadline" and hits[0].word == "deadline"
+
+
+def _fires(text, kw):
+    return any(h.reason == f"Keyword: {kw}" for h in alerts.check(text, NAMES, KW))
+
+
+def test_smart_keyword_plurals_and_lemmas():
+    assert _fires("we have two midterms", "midterm")
+    assert _fires("there are three exams", "exam")
+    assert _fires("the examination is hard", "exam")
+    assert _fires("two deadlines this week", "deadline")
+    assert _fires("the project is due", "deadline")       # expansion: due
+    assert _fires("surprise quizzes today", "quiz")
+
+
+def test_smart_keyword_close_spelling():
+    assert _fires("the deadlin is tight", "deadline")      # Levenshtein 1, >=5 chars
+
+
+def test_smart_keyword_no_false_fire():
+    assert alerts.check("the agents are ready", NAMES, KW) == []
+    assert alerts.check("quizzical look", NAMES, KW) == []

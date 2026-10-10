@@ -38,11 +38,43 @@ def _lev(a: str, b: str) -> int:
         return 0 if a == b else 99
 
 
+# Known expansions beyond simple plurals (lemma/synonym), tested.
+_EXPANSIONS = {
+    "exam": {"examination", "examinations"},
+    "deadline": {"due"},
+    "quiz": {"quizzes"},
+}
+
+
+def _stem(x: str) -> str:
+    if x.endswith("ies") and len(x) > 4:
+        return x[:-3] + "y"
+    if x.endswith("es") and len(x) > 4:
+        return x[:-2]
+    if x.endswith("s") and len(x) > 3:
+        return x[:-1]
+    return x
+
+
+def _kw_match(word: str, kw: str) -> bool:
+    """Match a spoken word to a keyword: exact, plural/lemma, known expansion, or
+    Levenshtein <= 1 on words of >= 5 chars (close spellings)."""
+    if word == kw:
+        return True
+    if _stem(word) == _stem(kw):
+        return True
+    if word in _EXPANSIONS.get(kw, set()):
+        return True
+    if len(word) >= 5 and len(kw) >= 5 and _lev(word, kw) <= 1:
+        return True
+    return False
+
+
 def check(text: str, names: list[str], keywords: list[str]) -> list[AlertHit]:
     hits: list[AlertHit] = []
     seen: set[str] = set()
     names_l = [n.lower() for n in names if n]
-    kw_l = {k.lower() for k in keywords if k}
+    kw_l = [k.lower() for k in keywords if k]
     for w in _words(text):
         bw = _bare(w)
         if not bw:
@@ -52,8 +84,10 @@ def check(text: str, names: list[str], keywords: list[str]) -> list[AlertHit]:
             seen.add("name:" + bw)
             hits.append(AlertHit("Heard your name", w.strip(".,?!")))
             continue
-        # keyword: exact word match only
-        if bw in kw_l and ("kw:" + bw) not in seen:
-            seen.add("kw:" + bw)
-            hits.append(AlertHit(f"Keyword: {bw}", w.strip(".,?!")))
+        # keyword: exact / plural / lemma / close spelling
+        for kw in kw_l:
+            if _kw_match(bw, kw) and ("kw:" + kw) not in seen:
+                seen.add("kw:" + kw)
+                hits.append(AlertHit(f"Keyword: {kw}", w.strip(".,?!")))
+                break
     return hits

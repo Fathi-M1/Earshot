@@ -612,6 +612,29 @@ def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[Fa
     async def qr_endpoint() -> Response:
         return Response(content=qr_png(phone_url()), media_type="image/png")
 
+    @dash.get("/qr.svg")
+    async def qr_svg_endpoint() -> Response:
+        import segno
+
+        buf = io.BytesIO()
+        segno.make(phone_url(), error="m").save(buf, kind="svg", scale=5, border=2,
+                                                dark=brand.color("forest-deep"), light=brand.color("paper"))
+        return Response(content=buf.getvalue(), media_type="image/svg+xml")
+
+    # product pages (About / Privacy / Terms / Accessibility / Licenses / FAQ)
+    from . import pages
+
+    def _make_page_route(renderer):
+        async def _route() -> HTMLResponse:
+            return HTMLResponse(await run_in_threadpool(renderer))
+        return _route
+
+    for _slug, _renderer in pages.RENDERERS.items():
+        dash.add_api_route(f"/{_slug}", _make_page_route(_renderer),
+                           methods=["GET"], response_class=HTMLResponse)
+        phone.add_api_route(f"/{_slug}", _make_page_route(_renderer),
+                            methods=["GET"], response_class=HTMLResponse)
+
     @dash.post("/mode")
     async def set_mode(request: Request) -> JSONResponse:
         body = await request.json()

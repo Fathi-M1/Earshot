@@ -179,6 +179,7 @@ class LiveController:
             self._mic = None
             self._emit({"type": "event", "kind": "mic_error", "detail": str(exc), "ts": _ms()})
             return
+        self._emit({"type": "event", "kind": "mic", "detail": self._mic.device_name, "ts": _ms()})
         self._thread = threading.Thread(target=self._worker, name="earshot-live", daemon=True)
         self._thread.start()
         threading.Thread(target=self._recall_worker, name="earshot-recall", daemon=True).start()
