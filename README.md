@@ -14,7 +14,8 @@
 <p align="center">
   English · Tagalog · Arabic<br>
   Made in Manila for AppBuilders PH 2026 · Team Skip Intro<br>
-  <a href="https://github.com/Fathi-M1/Earshot">github.com/Fathi-Ml/Earshot</a>
+  <a href="https://earshot-landing.vercel.app">earshot-landing.vercel.app</a><br>
+  <a href="https://github.com/Fathi-M1/Earshot">github.com/Fathi-M1/Earshot</a>
 </p>
 
 ---
