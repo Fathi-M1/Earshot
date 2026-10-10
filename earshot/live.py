@@ -440,6 +440,9 @@ class LiveController:
                         "reasons": reasons, "matched": matched, "ts": _ms()})
         self.history.append((time.time(), watch_en))
         self._pending_recall.append(watch_en)  # embedded when idle (recall worker)
+        self._save_session("line", watch_en)
+        if reasons:
+            self._save_session("alert", watch_en, topic=(matched[0] if matched else ""))
         self.timing["translate_ms"] = tr_ms
         self._emit({"type": "timing", **self.timing, "ts": _ms()})
         self._maybe_write_bench()
@@ -577,6 +580,7 @@ class LiveController:
             )
         self._emit({"type": "catchup", "id": cid, "line1": summary["line1"],
                     "line2": summary["line2"], "source": summary["source"], "ms": ms, "ts": _ms()})
+        self._save_session("catchup", " ".join(x for x in (summary.get("line1"), summary.get("line2")) if x))
 
     def say_catchup(self) -> dict:
         """Speak the last catch-up via Piper — only when the user taps 'Hear it'."""
@@ -585,6 +589,13 @@ class LiveController:
             return {"ok": False}
         voice.speak(f"In the last five minutes. {c.get('line1','')}. {c.get('line2','')}")
         return {"ok": True}
+
+    def _save_session(self, kind: str, text: str, topic: str = "") -> None:
+        try:
+            from . import sessions
+            sessions.add_event(kind, text, topic=topic or None)
+        except Exception:
+            pass
 
     def wipe(self) -> dict:
         """Delete everything stored (text only; audio was never stored)."""
@@ -599,6 +610,11 @@ class LiveController:
         except Exception:
             pass
         self.recall = recall.Recall()
+        try:
+            from . import sessions
+            sessions.wipe()
+        except Exception:
+            pass
         self._emit({"type": "event", "kind": "wiped", "detail": "all text deleted", "ts": _ms()})
         return {"ok": True}
 

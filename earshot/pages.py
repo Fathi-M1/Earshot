@@ -65,14 +65,20 @@ def _page(title: str, body: str) -> str:
  code{{font-family:"Fragment Mono",ui-monospace,monospace;color:{_C['sage']};}}
  table{{width:100%;border-collapse:collapse;font-size:14px;}}
  td{{padding:6px 8px;border-bottom:1px solid rgba(169,184,156,.2);}}
- .nav{{font:400 13px/1 ui-monospace,monospace;color:{_C['sage']};margin-bottom:24px;}}
- .nav a{{margin-right:14px;text-decoration:none;}}
+ .nav{{position:sticky;top:0;z-index:2;height:60px;display:flex;align-items:center;gap:10px;
+   padding-top:env(safe-area-inset-top);padding-left:16px;padding-right:16px;box-sizing:content-box;
+   background:{_C['fd']};border-bottom:1px solid rgba(221,227,211,.18);}}
+ .nav a{{text-decoration:none;color:{_C['beige']};}}
+ .nav .back{{width:40px;height:40px;border:1px solid rgba(221,227,211,.35);border-radius:11px;
+   display:flex;align-items:center;justify-content:center;font-size:22px;}}
+ .nav img{{width:22px;height:22px;border-radius:6px;}}
  .step{{display:flex;gap:14px;align-items:flex-start;margin:10px 0;}}
  .num{{flex:0 0 28px;height:28px;border-radius:50%;background:{_C['moss']};
    display:flex;align-items:center;justify-content:center;font-weight:600;}}
-</style></head><body><div class="wrap">
-<div class="nav"><a href="/">← {d}</a><a href="/about">About</a><a href="/privacy">Privacy</a>
-<a href="/terms">Terms</a><a href="/accessibility">Accessibility</a><a href="/licenses">Licenses</a><a href="/faq">FAQ</a></div>
+</style></head><body>
+<header class="nav"><a class="back" href="/" aria-label="Back">‹</a>
+<img src="/icon-192.png" alt=""><a href="/">{d}</a></header>
+<div class="wrap">
 <h1>{title}</h1>
 {body}
 </div></body></html>"""

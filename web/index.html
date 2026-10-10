@@ -12,7 +12,7 @@
 <title>remote</title>
 <style>
   @font-face{ font-family:"Host Grotesk"; src:url("/font/host-grotesk.ttf") format("truetype"); font-weight:400 700; font-display:swap; }
-  :root{ --forest:#1F3A24; --fd:#12241A; --moss:#3D5A40; --sage:#A9B89C; --beige:#DDE3D3;
+  :root{ --forest:#1F3A24; --fd:#12241A; --surface-raised:#1F3A24; --moss:#3D5A40; --sage:#A9B89C; --beige:#DDE3D3;
     --paper:#EEF1E8; --glow:#7FB3D5; --needs:#C9A45C; --fern:#8FA876; --cap:28px; color-scheme:dark; }
   *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html,body{ margin:0; height:100%; overscroll-behavior:none; }
@@ -70,25 +70,33 @@
   .act{ flex:1; height:54px; border-radius:13px; border:1px solid rgba(169,184,156,.4); background:transparent; color:var(--beige); font-size:16px; font-weight:600; }
   .act.primary{ background:var(--beige); color:var(--fd); border-color:var(--beige); }
   .act.on{ background:var(--moss); }
-  /* settings sheet — solid beige surface, dark forest text */
-  #sheet{ position:fixed; inset:0; background:var(--paper); color:var(--fd); display:none; flex-direction:column;
+  /* settings sheet — raised forest, beige text; page behind is dimmed */
+  #dim{ position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; z-index:4; }
+  #dim.on{ display:block; }
+  #sheet{ position:fixed; left:0; right:0; bottom:0; top:48px; z-index:5; background:var(--surface-raised); color:var(--beige);
+          display:none; flex-direction:column; border:1px solid rgba(221,227,211,.28); border-bottom:0; border-radius:16px 16px 0 0;
           padding:calc(18px + env(safe-area-inset-top)) 20px calc(18px + env(safe-area-inset-bottom)); overflow-y:auto; gap:12px; }
   #sheet.on{ display:flex; }
-  #sheet h2{ font-size:22px; margin:0; color:var(--fd); }
-  #sheet .grp{ font:600 12px/1 ui-monospace,monospace; text-transform:uppercase; letter-spacing:.08em; color:var(--moss); margin:18px 0 2px; }
-  #sheet label{ font-size:13px; color:var(--moss); display:block; margin-bottom:4px; }
-  #sheet input,#sheet select{ width:100%; height:44px; border-radius:10px; border:1px solid var(--moss); background:#fff; color:var(--fd); padding:0 12px; font-size:15px; }
+  #sheet h2{ font-size:22px; margin:0; color:var(--beige); }
+  #sheet .grp{ font:600 12px/1 ui-monospace,monospace; text-transform:uppercase; letter-spacing:.08em; color:var(--sage); margin:18px 0 2px; }
+  #sheet label{ font-size:13px; color:var(--sage); display:block; margin-bottom:4px; }
+  #sheet input,#sheet select{ width:100%; height:44px; border-radius:10px; border:1px solid rgba(221,227,211,.45); background:var(--fd); color:var(--beige); padding:0 12px; font-size:15px; }
   #sheet .row{ display:flex; gap:10px; }
-  #sheet .doc{ display:flex; justify-content:space-between; align-items:center; padding:12px 2px; border-bottom:1px solid rgba(61,90,64,.2); font-size:16px; color:var(--fd); cursor:pointer; }
-  #sheet .doc::after{ content:"›"; color:var(--moss); }
-  #sheet .kwchip{ display:inline-flex; align-items:center; gap:6px; background:var(--forest); color:var(--beige); border-radius:999px; padding:6px 10px; font-size:14px; margin:0 6px 6px 0; }
+  #sheet .doc{ display:flex; justify-content:space-between; align-items:center; padding:12px 2px; border-bottom:1px solid rgba(221,227,211,.28); font-size:16px; color:var(--beige); cursor:pointer; }
+  #sheet .doc::after{ content:"›"; color:var(--sage); }
+  #sheet .kwchip{ display:inline-flex; align-items:center; gap:6px; background:var(--fd); color:var(--beige); border:1px solid rgba(221,227,211,.28); border-radius:999px; padding:6px 10px; font-size:14px; margin:0 6px 6px 0; }
   #sheet .kwchip b{ cursor:pointer; opacity:.7; }
-  #sheet button.sav{ background:var(--forest); color:var(--beige); border:0; border-radius:10px; height:44px; font-weight:600; }
+  #sheet button.sav{ background:var(--beige); color:var(--fd); border:0; border-radius:10px; height:44px; font-weight:600; }
   #sheet button.danger{ background:#C47A62; color:#fff; border:0; border-radius:10px; height:44px; font-weight:600; }
   #sheet .ver{ margin-top:auto; color:var(--moss); font:400 11px/1.4 ui-monospace,monospace; padding-top:16px; }
+  #replay{ position:fixed; inset:0; z-index:6; background:var(--fd); color:var(--beige); display:none; flex-direction:column; }
+  #replay.on{ display:flex; }
+  #replayScroll{ flex:1; overflow:auto; padding:12px 16px 16px; }
+  #replayScroll .line.alert .primary{ color:var(--needs); }
   #docsheet{ position:fixed; inset:0; background:var(--fd); display:none; flex-direction:column; z-index:5; }
   #docsheet.on{ display:flex; }
-  #docsheet .bar{ display:flex; align-items:center; gap:10px; padding:calc(10px + env(safe-area-inset-top)) 14px 8px; }
+  #docsheet .bar{ display:flex; align-items:center; gap:10px; height:60px; box-sizing:content-box;
+    padding:env(safe-area-inset-top) 14px 0; flex:0 0 auto; border-bottom:1px solid rgba(221,227,211,.18); background:var(--fd); }
   #docsheet iframe{ flex:1; border:0; width:100%; background:var(--fd); }
   #resume{ position:fixed; inset:0; background:rgba(18,36,26,.94); display:none; align-items:center; justify-content:center; flex-direction:column; gap:12px; }
   #resume.on{ display:flex; }
@@ -140,9 +148,10 @@
     </div>
   </div>
 
+  <div id="dim"></div>
   <div id="sheet">
     <div style="display:flex;align-items:center;justify-content:space-between">
-      <h2>Settings</h2><button class="gear" id="closeSheet" style="border-color:var(--moss);color:var(--fd)">✕</button></div>
+      <h2>Settings</h2><button class="gear" id="closeSheet">✕</button></div>
 
     <div class="grp">Alerts</div>
     <div><label>Your name</label><input id="setName" placeholder="Fathi"></div>
@@ -168,6 +177,15 @@
     <div class="doc" data-doc="faq">FAQ</div>
 
     <div class="ver" id="ver">Earshot</div>
+  </div>
+
+  <div id="replay">
+    <div class="top"><button class="gear" id="replayBack" aria-label="Back">‹</button><span id="replayTitle" style="font-weight:600"></span></div>
+    <div id="replayScroll"></div>
+    <div class="actions">
+      <button class="act primary" id="replayGo">Replay</button>
+      <button class="act" id="calGo">Add deadlines to calendar</button>
+    </div>
   </div>
 
   <div id="docsheet">
@@ -363,12 +381,32 @@
   $("kwAdd").addEventListener("keydown",function(e){ if(e.key==="Enter"){ var v=e.target.value.trim(); if(v){ kw.push(v); e.target.value=""; renderKw(); } e.preventDefault(); } });
   function loadSettings(){ fetch("/settings").then(r=>r.json()).then(function(s){
     $("setName").value=s.name||""; kw=(s.keywords||[]).slice(); renderKw(); $("setExpire").value=s.auto_expire||"24h"; }).catch(()=>{}); }
+  var replayTimer=null, replaySession=null;
   function loadSessions(){ fetch("/sessions").then(r=>r.json()).then(function(j){
     $("sessList").innerHTML=(j.sessions||[]).length? j.sessions.map(function(s){
-      return '<div class="doc" onclick="window.open(\'/session/ics?session='+encodeURIComponent(s.session)+'\')">'+esc(s.session)+'</div>'; }).join("")
-      : '<div style="color:var(--moss)">No saved sessions yet.</div>'; }).catch(()=>{}); }
-  $("gearBtn").onclick=function(){ loadSettings(); loadSessions(); $("ver").textContent="Earshot · "+appMode+" · local-only, 0 bytes to the internet"; $("sheet").classList.add("on"); };
-  $("closeSheet").onclick=function(){ $("sheet").classList.remove("on"); };
+      return '<div class="doc" data-sid="'+s.id+'">'+esc(s.label)+'<div style="color:var(--sage);font-size:13px">'+esc(s.start)+'–'+esc(s.end)+' · '+s.lines+' lines</div></div>';
+    }).join("") : '<div style="color:var(--sage)">No saved sessions yet.</div>';
+    $("sessList").querySelectorAll("[data-sid]").forEach(function(el){ el.onclick=function(){ openSession(+el.dataset.sid); }; });
+  }).catch(()=>{}); }
+  function openSession(id){ fetch("/session?id="+id).then(r=>r.json()).then(function(s){
+    replaySession=s; $("replayTitle").textContent=s.label||"Session";
+    $("replayScroll").innerHTML=(s.events||[]).map(function(e){
+      return '<div class="line'+(e.kind==="alert"?" alert":"")+'"><div class="who">'+esc(e.time)+" · "+esc(e.kind)+'</div><div class="primary">'+esc(e.text)+'</div></div>';
+    }).join("") || '<div class="muted">Nothing saved in this session.</div>';
+    $("replay").classList.add("on");
+  }); }
+  $("replayBack").onclick=function(){ clearInterval(replayTimer); $("replay").classList.remove("on"); };
+  $("replayGo").onclick=function(){ if(!replaySession) return; clearInterval(replayTimer);
+    var ev=replaySession.events||[], i=0; $("replayScroll").innerHTML="";
+    replayTimer=setInterval(function(){ if(i>=ev.length){ clearInterval(replayTimer); return; }
+      var e=ev[i++]; var d=document.createElement("div"); d.className="line"+(e.kind==="alert"?" alert":"");
+      d.innerHTML='<div class="who">'+esc(e.time)+" · "+esc(e.kind)+'</div><div class="primary">'+esc(e.text)+'</div>';
+      $("replayScroll").appendChild(d); $("replayScroll").scrollTop=$("replayScroll").scrollHeight; }, 700);
+  };
+  $("calGo").onclick=function(){ if(replaySession) location.href="/session/ics?id="+replaySession.id; };
+  $("gearBtn").onclick=function(){ loadSettings(); loadSessions(); $("ver").textContent="Earshot · "+appMode+" · local-only, 0 bytes to the internet"; $("dim").classList.add("on"); $("sheet").classList.add("on"); };
+  $("closeSheet").onclick=function(){ $("sheet").classList.remove("on"); $("dim").classList.remove("on"); };
+  $("dim").onclick=function(){ $("closeSheet").click(); };
   $("saveSet").onclick=function(){ post("/settings",{name:$("setName").value,keywords:kw,auto_expire:$("setExpire").value}).then(()=>{ $("closeSheet").click(); }); };
   $("endBtn").onclick=function(){ post("/session/end").then(loadSessions); };
   $("wipeBtn").onclick=function(){ if(confirm("Delete all stored text? This cannot be undone.")) post("/wipe"); };

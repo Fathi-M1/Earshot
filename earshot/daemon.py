@@ -572,12 +572,36 @@ def _live_page(token: str, dev: bool = True) -> str:
 
   function renderSessions(list){{
     const el=document.getElementById('sessions'); el.innerHTML='';
-    (list||[]).forEach(s=>{{
-      const row=document.createElement('div'); row.className='kv';
-      row.innerHTML='<span class="k">'+esc(s.session)+'</span>'+
-        '<a href="/session/ics?session='+encodeURIComponent(s.session)+'" style="color:var(--beige)">Download .ics</a>';
+    if(!(list||[]).length){{ el.innerHTML='<div class="kv"><span class="k">No saved sessions yet.</span></div>'; return; }}
+    list.forEach(s=>{{
+      const row=document.createElement('button'); row.className='cv'; row.style.cssText='width:100%;text-align:left;height:auto;padding:8px 10px';
+      row.innerHTML='<b>'+esc(s.label)+'</b><div style="color:var(--sage);font-size:12px">'+esc(s.start)+'–'+esc(s.end)+' · '+s.lines+' lines</div>';
+      row.onclick=()=>openSession(s.id);
       el.appendChild(row);
     }});
+  }}
+  let replayTimer=null;
+  async function openSession(id){{
+    const s=await (await fetch('/session?id='+id)).json();
+    const host=document.getElementById('sessions');
+    let box=document.getElementById('replayBox');
+    if(!box){{ box=document.createElement('div'); box.id='replayBox'; box.style.marginTop='10px'; host.after(box); }}
+    const lines=(s.events||[]).map(e=>'<div class="row'+(e.kind==='alert'?' match':'')+'" data-kind="'+e.kind+'"><div class="t">'+esc(e.time)+'</div><div class="lang">'+esc(e.kind)+'</div><div class="orig">'+esc(e.text)+'</div></div>').join('');
+    box.innerHTML='<h2>'+esc(s.label)+'</h2><div id="replayLog" style="max-height:240px;overflow:auto">'+lines+'</div>'+
+      '<div style="display:flex;gap:8px;margin-top:8px"><button class="cv" id="replayGo">Replay</button>'+
+      '<a class="cv" id="calGo" style="display:inline-flex;align-items:center;height:28px;padding:0 10px;text-decoration:none" href="/session/ics?id='+s.id+'">Add deadlines to calendar</a></div>';
+    document.getElementById('replayGo').onclick=()=>{{
+      const log=document.getElementById('replayLog'); log.innerHTML='';
+      const ev=s.events||[]; let i=0;
+      clearInterval(replayTimer);
+      replayTimer=setInterval(()=>{{
+        if(i>=ev.length){{ clearInterval(replayTimer); return; }}
+        const e=ev[i++];
+        const row=document.createElement('div'); row.className='row'+(e.kind==='alert'?' match':'');
+        row.innerHTML='<div class="t">'+esc(e.time)+'</div><div class="lang">'+esc(e.kind)+'</div><div class="orig">'+esc(e.text)+'</div>';
+        log.appendChild(row); log.scrollTop=log.scrollHeight;
+      }}, 700);
+    }};
   }}
   async function refreshSessions(){{ try {{ const j=await (await fetch('/sessions')).json(); renderSessions(j.sessions); }} catch(_){{}} }}
   document.getElementById('endBtn').onclick=async()=>{{
@@ -742,13 +766,42 @@ def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[Fa
         return JSONResponse(await run_in_threadpool(controller.wipe))
 
     async def _sessions() -> JSONResponse:
-        from . import notes
+        from . import sessions
 
-        return JSONResponse({"sessions": notes.list_sessions()})
+        return JSONResponse({"sessions": sessions.list_saved()})
+
+    async def _session_one(request: Request) -> JSONResponse:
+        from . import sessions
+
+        try:
+            sid = int(request.query_params.get("id") or 0)
+        except ValueError:
+            sid = 0
+        row = sessions.get_session(sid)
+        if not row:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        return JSONResponse(row)
 
     async def _session_ics(request: Request) -> Response:
-        from . import notes
+        from . import notes, sessions
 
+        sid = request.query_params.get("id")
+        if sid:
+            try:
+                row = sessions.get_session(int(sid))
+            except ValueError:
+                row = None
+            if not row:
+                return Response(status_code=404)
+            now = __import__("datetime").datetime.now()
+            events = []
+            for ev in row["events"]:
+                date = notes._resolve_date(ev["text"], now)
+                if date:
+                    events.append({"what": ev["text"][:80], "quote": ev["text"], "date": date})
+            body = notes._ics(events, now)
+            return Response(body, media_type="text/calendar",
+                            headers={"Content-Disposition": f'attachment; filename="session-{sid}.ics"'})
         name = request.query_params.get("session", "")
         for s in notes.list_sessions():
             if s["session"] == name and os.path.exists(s["ics_path"]):
@@ -782,6 +835,7 @@ def build_apps(hub: Hub, controller: "LiveController | None" = None) -> tuple[Fa
         app.add_api_route("/session/end", _session_end, methods=["POST"])
         app.add_api_route("/wipe", _wipe, methods=["POST"])
         app.add_api_route("/sessions", _sessions, methods=["GET"])
+        app.add_api_route("/session", _session_one, methods=["GET"])
         app.add_api_route("/session/ics", _session_ics, methods=["GET"])
         app.add_api_route("/mute", _mute, methods=["POST"])
         app.add_api_route("/unmute", _unmute, methods=["POST"])
