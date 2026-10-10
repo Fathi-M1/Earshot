@@ -2,9 +2,7 @@ import tokens from "../../../design/tokens.json";
 
 export const brand = tokens.brand;
 
-// FLAG: `git remote get-url origin` failed. This repo has no remotes.
-// Replace REPO_URL with the real GitHub repository before treating these links as live.
-export const REPO_URL = "https://github.com/REPLACE_WITH_ORIGIN/earshot";
+export const REPO_URL = "https://github.com/Fathi-M1/Earshot";
 export const githubUrl = REPO_URL;
 
 export const contactEmail = "fatximahadpoqor1@gmail.com";
